@@ -16,7 +16,10 @@ src/
 │   ├── ApiKeySettings.tsx            # API 키 입력 패널 (접을 수 있음)
 │   ├── UrlInput.tsx                  # YouTube URL 입력 + 분석 버튼
 │   ├── LoadingState.tsx              # 3단계 진행 표시기
+│   ├── ErrorState.tsx                # 에러 메시지 카드 + 재시도 버튼
+│   ├── EmptyState.tsx                # 첫 진입 시 안내 텍스트
 │   ├── ReportView.tsx                # 리포트 전체 컨테이너
+│   ├── ReportHeader.tsx              # 분석 댓글 수 표시
 │   ├── SentimentChart.tsx            # 센티먼트 비율 바 (CSS only)
 │   ├── InsightCard.tsx               # 강점/개선점 카드 (재사용)
 │   └── CommentList.tsx               # 대표 댓글 목록
@@ -24,8 +27,8 @@ src/
 │   └── index.ts                      # 모든 TypeScript 인터페이스
 ├── lib/
 │   ├── youtube.ts                    # YouTube URL 파싱, videoId 추출
-│   ├── storage.ts                    # localStorage 헬퍼 (API 키 저장/조회)
-│   └── constants.ts                  # Claude 프롬프트 템플릿, 설정 상수
+│   ├── storage.ts                    # localStorage 헬퍼 (API 키 저장/조회/삭제)
+│   └── constants.ts                  # Claude 프롬프트 템플릿, 설정 상수, 에러 메시지 맵
 └── services/
     ├── youtubeService.ts             # /api/youtube/comments 호출 래퍼
     └── analyzeService.ts             # /api/analyze 호출 래퍼
@@ -100,6 +103,7 @@ interface ApiKeys {
 
 interface ApiError {
   error: string;
+  isApiKeyError?: boolean;  // true면 설정 패널 자동 열기
 }
 ```
 
@@ -139,15 +143,17 @@ YouTube Data API v3의 `commentThreads.list`를 프록시한다.
 | 상태 | 조건 | 응답 body |
 |------|------|-----------|
 | 400 | videoId 또는 apiKey 누락 | `{ "error": "Missing videoId or apiKey" }` |
-| 400 | YouTube API가 잘못된 키로 거부 | `{ "error": "YouTube API error: ..." }` |
+| 400 | YouTube API가 잘못된 키로 거부 | `{ "error": "YouTube API error: ...", "isApiKeyError": true }` |
 | 403 | 댓글 비활성화 | `{ "error": "commentsDisabled" }` |
 | 403 | 할당량 초과 | `{ "error": "quotaExceeded" }` |
 | 404 | 영상 없음 | `{ "error": "videoNotFound" }` |
+| 504 | YouTube API 응답 타임아웃 | `{ "error": "YouTube API timeout" }` |
 
 **구현 세부사항:**
 - YouTube API 호출 URL: `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId={videoId}&maxResults={maxResults}&order=relevance&textFormat=plainText&key={apiKey}`
 - YouTube API 응답에서 `items[].snippet.topLevelComment.snippet`의 `textDisplay`, `authorDisplayName`, `likeCount`, `publishedAt`를 추출하여 `Comment` 형태로 변환한다
 - YouTube API 에러 응답의 `error.errors[0].reason`을 확인하여 `commentsDisabled`, `quotaExceeded`, `videoNotFound` 등을 구분한다
+- fetch에 `signal: AbortSignal.timeout(15000)` 적용 — 15초 타임아웃. 초과 시 504 반환.
 
 ### POST /api/analyze
 
@@ -160,6 +166,8 @@ Anthropic Messages API를 프록시하여 댓글 센티먼트를 분석한다.
   "apiKey": "sk-ant-..."       // Anthropic API 키
 }
 ```
+
+**Request body 크기 제한:** 100개 댓글 × 평균 200자 = ~20KB. Next.js 기본 body 파서 한도(1MB)에 한참 못 미침.
 
 **Response (200):**
 ```json
@@ -181,19 +189,25 @@ Anthropic Messages API를 프록시하여 댓글 센티먼트를 분석한다.
 |------|------|-----------|
 | 400 | comments 또는 apiKey 누락 | `{ "error": "Missing comments or apiKey" }` |
 | 400 | comments가 빈 배열 | `{ "error": "No comments to analyze" }` |
-| 401 | Anthropic API 키 무효 | `{ "error": "Invalid Anthropic API key" }` |
+| 401 | Anthropic API 키 무효 | `{ "error": "Invalid Anthropic API key", "isApiKeyError": true }` |
 | 400 | Anthropic 잔액 부족 | `{ "error": "Insufficient Anthropic API credits" }` |
 | 429 | Anthropic 레이트 리밋 | `{ "error": "Rate limited. Please try again later." }` |
 | 500 | Claude JSON 파싱 실패 | `{ "error": "Failed to parse analysis result" }` |
 | 502 | Anthropic 서버 오류 | `{ "error": "AI service temporarily unavailable" }` |
+| 504 | Anthropic API 응답 타임아웃 | `{ "error": "AI service timeout" }` |
 
 **구현 세부사항:**
 - Anthropic API 호출: `POST https://api.anthropic.com/v1/messages`
 - 헤더: `Content-Type: application/json`, `x-api-key: {apiKey}`, `anthropic-version: 2023-06-01`
 - 모델: `claude-sonnet-4-20250514`
 - `max_tokens: 2048`
+- fetch에 `signal: AbortSignal.timeout(30000)` 적용 — 30초 타임아웃 (Claude 응답이 YouTube API보다 느림). 초과 시 504 반환.
 - Claude의 텍스트 응답을 `JSON.parse`하여 `AnalysisReport` 객체로 변환
-- JSON 파싱 실패 시 500 에러를 반환 (재시도 로직은 클라이언트에서 사용자가 수동으로)
+- JSON 파싱 전 방어 처리:
+  1. 응답 텍스트에서 ` ```json ``` ` 코드 펜스 제거
+  2. 첫 `{`부터 마지막 `}`까지 추출
+  3. `JSON.parse` 시도
+  4. 실패 시 500 에러 반환
 
 ---
 
@@ -248,43 +262,51 @@ Rules:
 
 ### 정상 흐름
 ```
-사용자: YouTube URL 입력 + "분석" 클릭
+사용자: YouTube URL 입력 + "분석" 클릭 (또는 Enter)
     ↓
 Client (page.tsx):
-  1. extractVideoId(url) — videoId 추출. null이면 에러 표시 후 중단.
-  2. getApiKeys() — localStorage에서 키 조회. 빈 값이면 에러 표시 후 중단.
-  3. setPhase("loading"), loadingStep[0] = "active"
+  1. url.trim() — 앞뒤 공백 제거
+  2. extractVideoId(url) — videoId 추출. null이면 인라인 에러 표시, phase 유지(idle).
+  3. getApiKeys() — localStorage에서 키 조회. 빈 값이면 인라인 에러 + 설정 패널 열기, phase 유지(idle).
+  4. setPhase("loading"), loadingStep[0] = "active"
+  5. URL 입력 필드 disabled, 분석 버튼 disabled
     ↓
 Client → GET /api/youtube/comments?videoId=...&apiKey=...&maxResults=100
     ↓
 API Route (youtube/comments/route.ts):
   1. videoId, apiKey 파라미터 검증
-  2. YouTube Data API v3 호출 (commentThreads.list)
+  2. YouTube Data API v3 호출 (commentThreads.list, 15초 타임아웃)
   3. 응답 변환: items[] → Comment[]
   4. 에러 시: YouTube 에러 reason 파싱 → 적절한 HTTP 상태 + 에러 메시지 반환
     ↓
 Client:
   1. 응답 수신. 에러면 setPhase("error") + 에러 메시지 표시.
-  2. comments.length === 0 이면 "댓글 없음" 에러 표시 후 중단.
+     에러에 isApiKeyError가 있으면 설정 패널 자동 열기.
+  2. comments.length === 0 이면 setPhase("error") + "댓글 없음" 메시지.
   3. loadingStep[0] = "done", loadingStep[1] = "active"
+  4. totalResults를 상태에 저장 (리포트 헤더에서 사용)
     ↓
 Client → POST /api/analyze { comments, apiKey }
     ↓
 API Route (analyze/route.ts):
   1. comments, apiKey 검증
   2. buildAnalysisPrompt(comments) — 프롬프트 조립
-  3. Anthropic Messages API 호출 (claude-sonnet-4-20250514, max_tokens: 2048)
+  3. Anthropic Messages API 호출 (claude-sonnet-4-20250514, max_tokens: 2048, 30초 타임아웃)
   4. 응답에서 content[0].text 추출
-  5. JSON.parse — 실패 시 500 에러 반환
-  6. 파싱된 AnalysisReport 반환
+  5. 방어 처리: 코드 펜스 제거 → JSON 추출 → JSON.parse
+  6. 실패 시 500 에러 반환
+  7. 파싱된 AnalysisReport 반환
     ↓
 Client:
   1. 응답 수신. 에러면 setPhase("error") + 에러 메시지 표시.
-  2. setReport(result)
-  3. loadingStep[1] = "done", loadingStep[2] = "active" → "done"
-  4. setPhase("report")
+  2. sentiment 합계 검증. 100이 아니면 정규화.
+  3. setReport(result)
+  4. loadingStep[1] = "done", loadingStep[2] = "active" → "done"
+  5. setPhase("report")
+  6. URL 입력 필드 다시 enabled (새 URL 입력 가능)
     ↓
-ReportView 렌더링: summary → SentimentChart → InsightCard×2 → CommentList
+ReportView 렌더링 (fade-in):
+  ReportHeader (댓글 수) → summary → SentimentChart → InsightCard×2 → CommentList → "다른 영상 분석하기" 버튼
 ```
 
 ### 에러 흐름
@@ -293,8 +315,29 @@ ReportView 렌더링: summary → SentimentChart → InsightCard×2 → CommentL
   1. catch 블록에서 에러 메시지 추출
   2. setError(message)
   3. setPhase("error")
-  4. ErrorState 컴포넌트가 에러 메시지 + "다시 시도" 버튼 표시
-  5. "다시 시도" 클릭 → setPhase("idle"), setError(null)
+  4. URL 입력 필드 다시 enabled, 기존 URL 유지
+  5. 분석 버튼 다시 enabled
+  6. ErrorState 컴포넌트 렌더링:
+     - 에러 아이콘 (X 마크) + 에러 메시지 텍스트
+     - "다시 시도" 버튼 (같은 URL로 재분석)
+  7. isApiKeyError인 경우 설정 패널 자동 열기
+  8. "다시 시도" 클릭 → handleAnalyze() 재실행 (phase는 다시 loading으로)
+```
+
+### 리포트 → 재분석 흐름
+```
+리포트 상태에서:
+  옵션 A: "다른 영상 분석하기" 버튼 클릭
+    → setUrl(""), setReport(null), setPhase("idle")
+    → URL 입력 필드에 포커스 이동
+
+  옵션 B: URL 입력 필드에 새 URL 입력 + "분석" 클릭
+    → setReport(null), setPhase("loading")
+    → 새 URL로 분석 시작
+
+  옵션 C: URL 변경 없이 "분석" 버튼 클릭 (같은 영상 재분석)
+    → setReport(null), setPhase("loading")
+    → 동일 URL로 분석 시작
 ```
 
 ---
@@ -307,8 +350,10 @@ const [phase, setPhase] = useState<AppPhase>("idle");
 const [url, setUrl] = useState("");
 const [report, setReport] = useState<AnalysisReport | null>(null);
 const [error, setError] = useState<string | null>(null);
+const [inlineError, setInlineError] = useState<string | null>(null);  // URL 검증 에러 (idle 상태에서)
 const [loadingSteps, setLoadingSteps] = useState<LoadingStep[]>([]);
 const [settingsOpen, setSettingsOpen] = useState(false);
+const [commentsMeta, setCommentsMeta] = useState<{ analyzed: number; total: number } | null>(null);
 ```
 
 ### 상태 전이 다이어그램
@@ -324,20 +369,23 @@ const [settingsOpen, setSettingsOpen] = useState(false);
           │                    ▼   ▼         │
           │               report  error      │
           │                  │      │        │
-          │     (다른 영상)──┘      │(다시 시도)
-          └─────────────────────────┘
+          │     (다른 영상)──┘      │(다시 시도→loading)
+          │        │                │(다른 영상)
+          └────────┘────────────────┘
 ```
 
 ### 유효한 전이만 허용
-| From | To | 트리거 |
-|------|----|--------|
-| idle | loading | "분석" 버튼 클릭 (검증 통과 시) |
-| loading | report | 분석 완료 |
-| loading | error | 어떤 단계든 실패 |
-| report | idle | "다른 영상 분석하기" 클릭 |
-| error | idle | "다시 시도" 클릭 |
+| From | To | 트리거 | URL 필드 | 리포트 |
+|------|----|--------|----------|--------|
+| idle | loading | "분석" 클릭 (검증 통과) | disabled, 값 유지 | - |
+| loading | report | 분석 완료 | enabled, 값 유지 | 표시 |
+| loading | error | 어떤 단계든 실패 | enabled, 값 유지 | - |
+| report | loading | 새 URL 입력 + "분석" 클릭 | disabled, 새 URL | 제거 |
+| report | idle | "다른 영상 분석하기" 클릭 | enabled, 비움 + 포커스 | 제거 |
+| error | loading | "다시 시도" 또는 "분석" 클릭 | disabled, 값 유지 | - |
+| error | idle | "다른 영상 분석하기" 클릭 | enabled, 비움 + 포커스 | - |
 
-`idle → error`는 없다. URL 검증 실패나 API 키 미설정은 `idle` 상태에서 인라인 메시지로 처리하고 phase를 변경하지 않는다.
+`idle` 상태에서 검증 실패(잘못된 URL, 키 미설정)는 phase를 변경하지 않고 `inlineError`만 설정한다.
 
 ### 로딩 단계
 | 인덱스 | label | 언제 active | 언제 done |
@@ -352,7 +400,7 @@ const [settingsOpen, setSettingsOpen] = useState(false);
 
 ### `lib/youtube.ts` — extractVideoId
 ```
-입력: YouTube URL 문자열
+입력: YouTube URL 문자열 (trim 처리된)
 출력: 11자 영상 ID 또는 null
 
 지원 패턴:
@@ -360,12 +408,17 @@ const [settingsOpen, setSettingsOpen] = useState(false);
   /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/
   /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
   /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
+  /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/
 
-주의: URL에 &list=, &t=, &index= 등 추가 쿼리가 붙어도 동작해야 한다.
-YouTube video ID는 항상 정확히 11자이며 [a-zA-Z0-9_-]로 구성된다.
+주의사항:
+  - URL에 &list=, &t=, &index= 등 추가 쿼리가 붙어도 동작해야 한다
+  - YouTube video ID는 항상 정확히 11자이며 [a-zA-Z0-9_-]로 구성된다
+  - http:// 와 https:// 모두 지원해야 한다
+  - www 유무 모두 지원 (youtube.com, www.youtube.com)
+  - 영상 ID만 입력한 경우 null 반환 (URL 패턴이 아니므로)
 ```
 
-### `lib/storage.ts` — getApiKeys, saveApiKeys
+### `lib/storage.ts` — getApiKeys, saveApiKeys, deleteApiKey
 ```
 localStorage 키:
   "yt-sentiment-youtube-key"   → YouTube API 키
@@ -373,10 +426,32 @@ localStorage 키:
 
 getApiKeys(): ApiKeys
   - SSR 환경(typeof window === "undefined")에서는 빈 문자열 반환
+  - localStorage 접근을 try/catch로 감싼다 (시크릿 모드 대응)
+  - 실패 시 빈 문자열 반환
   - localStorage에서 두 키를 읽어 ApiKeys 객체로 반환
 
 saveApiKeys(keys: ApiKeys): void
   - 두 키를 localStorage에 저장
+  - try/catch로 감싸고, 실패 시 에러를 무시 (메모리에서만 유지)
+
+deleteApiKey(type: "youtube" | "anthropic"): void
+  - 해당 키를 localStorage에서 제거
+
+isStorageAvailable(): boolean
+  - localStorage 접근 가능 여부 반환 (시크릿 모드 감지용)
+```
+
+### `lib/constants.ts` — 에러 메시지 매핑
+```typescript
+// API Route가 반환한 에러 코드 → 사용자 친화적 한국어 메시지
+const ERROR_MESSAGES: Record<string, string> = { ... };
+
+// API 키 관련 에러인지 판별 (설정 패널 자동 열기용)
+const API_KEY_ERRORS = new Set([
+  "YouTube API 키가 유효하지 않습니다",
+  "Invalid Anthropic API key",
+  ...
+]);
 ```
 
 ---
@@ -385,16 +460,46 @@ saveApiKeys(keys: ApiKeys): void
 
 ```typescript
 // ApiKeySettings
-{ open: boolean; onToggle: () => void; onSave: (keys: ApiKeys) => void }
+{
+  open: boolean;
+  onToggle: () => void;
+  onSave: (keys: ApiKeys) => void;
+  onDelete: (type: "youtube" | "anthropic") => void;
+  savedKeys: ApiKeys;          // 마스킹 표시용 (빈 문자열이면 미설정)
+  storageAvailable: boolean;   // false면 "시크릿 모드" 안내 표시
+}
 
 // UrlInput
-{ value: string; onChange: (v: string) => void; onSubmit: () => void; disabled: boolean }
+{
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  disabled: boolean;
+  error: string | null;        // 인라인 에러 메시지
+}
 
 // LoadingState
 { steps: LoadingStep[] }
 
+// ErrorState
+{
+  message: string;
+  onRetry: () => void;         // "다시 시도"
+  onReset: () => void;         // "다른 영상 분석하기"
+}
+
+// EmptyState
+(props 없음 — 정적 안내 텍스트)
+
 // ReportView
-{ report: AnalysisReport; onReset: () => void }
+{
+  report: AnalysisReport;
+  commentsMeta: { analyzed: number; total: number };
+  onReset: () => void;         // "다른 영상 분석하기"
+}
+
+// ReportHeader
+{ analyzed: number; total: number }
 
 // SentimentChart
 { sentiment: SentimentRatio }
@@ -412,55 +517,70 @@ saveApiKeys(keys: ApiKeys): void
 
 ### 레이어별 에러 처리
 
-**1. 클라이언트 검증 (page.tsx, API 호출 전)**
+**1. 클라이언트 검증 (page.tsx, API 호출 전) — phase를 바꾸지 않음**
 | 조건 | 처리 |
 |------|------|
-| URL 입력이 비어 있음 | "분석" 버튼 비활성화 (disabled) |
-| extractVideoId가 null 반환 | 인라인 에러 "유효한 YouTube URL을 입력해 주세요" |
-| API 키가 비어 있음 | 인라인 에러 "API 키를 먼저 설정해 주세요" + 설정 패널 자동 열기 |
+| URL 입력이 비어 있음 | "분석" 버튼 비활성화 (disabled). 에러 메시지 없음. |
+| extractVideoId가 null 반환 | inlineError = "유효한 YouTube URL을 입력해 주세요. (예: https://www.youtube.com/watch?v=...)" |
+| API 키가 비어 있음 | inlineError = "API 키를 먼저 설정해 주세요." + 설정 패널 자동 열기 |
+| 사용자가 URL 수정 시 | inlineError = null (에러 자동 제거) |
 
 **2. API Route — YouTube 프록시 (youtube/comments/route.ts)**
 | YouTube API 응답 | 우리 API 응답 |
 |------------------|---------------|
 | 200 + items 있음 | 200 + Comment[] 반환 |
 | 200 + items 없음 | 200 + 빈 배열 반환 (클라이언트에서 처리) |
-| 400 (badRequest) | 400 + `{ error: "YouTube API 키가 유효하지 않습니다" }` |
+| 400 (badRequest) | 400 + `{ error: "...", isApiKeyError: true }` |
 | 403 reason=commentsDisabled | 403 + `{ error: "commentsDisabled" }` |
 | 403 reason=quotaExceeded | 403 + `{ error: "quotaExceeded" }` |
 | 404 reason=videoNotFound | 404 + `{ error: "videoNotFound" }` |
 | 기타 에러 | 해당 상태코드 + `{ error: YouTube 에러 메시지 }` |
+| fetch 타임아웃 (15초) | 504 + `{ error: "YouTube API timeout" }` |
 | fetch 자체 실패 (네트워크) | 502 + `{ error: "Failed to reach YouTube API" }` |
 
 **3. API Route — Claude 프록시 (analyze/route.ts)**
 | Anthropic API 응답 | 우리 API 응답 |
 |--------------------|---------------|
 | 200 + 유효한 JSON 텍스트 | 200 + AnalysisReport |
-| 200 + JSON 파싱 실패 | 500 + `{ error: "Failed to parse analysis result" }` |
-| 401 (authentication_error) | 401 + `{ error: "Invalid Anthropic API key" }` |
+| 200 + JSON 파싱 실패 (방어 처리 후에도) | 500 + `{ error: "Failed to parse analysis result" }` |
+| 401 (authentication_error) | 401 + `{ error: "Invalid Anthropic API key", isApiKeyError: true }` |
 | 400 (insufficient_quota) | 400 + `{ error: "Insufficient Anthropic API credits" }` |
 | 429 (rate_limit_error) | 429 + `{ error: "Rate limited" }` |
 | 500/529 (서버 오류/과부하) | 502 + `{ error: "AI service temporarily unavailable" }` |
+| fetch 타임아웃 (30초) | 504 + `{ error: "AI service timeout" }` |
 | fetch 자체 실패 (네트워크) | 502 + `{ error: "Failed to reach AI service" }` |
 
 **4. 클라이언트 에러 수신 (page.tsx, API 호출 후)**
 ```typescript
 try {
-  const { comments } = await fetchComments(videoId, keys.youtube);
-  // ...
+  const { comments, totalResults } = await fetchComments(videoId, keys.youtube);
+
+  if (comments.length === 0) {
+    setError("이 영상에 댓글이 없습니다.");
+    setPhase("error");
+    return;
+  }
+
+  setCommentsMeta({ analyzed: comments.length, total: totalResults });
+  // ... loadingStep 업데이트 ...
+
   const result = await analyzeComments(comments, keys.anthropic);
-  // ...
+  // ... sentiment 정규화, 리포트 표시 ...
+
 } catch (err) {
   const message = err instanceof Error ? err.message : "예기치 않은 오류가 발생했습니다";
-  setError(message);
+  setError(mapErrorMessage(message));  // 에러 코드 → 한국어 메시지
   setPhase("error");
+
+  if (isApiKeyError(message)) {
+    setSettingsOpen(true);  // 설정 패널 자동 열기
+  }
 }
 ```
 
-서비스 레이어(`services/*.ts`)에서 `res.ok`가 아닌 경우 에러 body의 `error` 필드를 추출하여 `throw new Error(에러메시지)`한다. 이 메시지가 클라이언트의 에러 메시지 매핑 테이블을 통해 사용자 친화적 메시지로 변환된다.
+서비스 레이어(`services/*.ts`)에서 `res.ok`가 아닌 경우 에러 body의 `error` 필드를 추출하여 `throw new Error(에러코드)`한다. `lib/constants.ts`의 `mapErrorMessage()`가 에러 코드를 사용자 친화적 한국어 메시지로 변환한다.
 
-### 에러 메시지 매핑 (서비스 레이어)
-
-서비스 레이어에서 API Route가 반환한 에러 코드를 사용자 메시지로 변환한다:
+### 에러 메시지 매핑 (lib/constants.ts)
 
 ```typescript
 const ERROR_MESSAGES: Record<string, string> = {
@@ -471,10 +591,25 @@ const ERROR_MESSAGES: Record<string, string> = {
   "Insufficient Anthropic API credits": "Anthropic API 잔액이 부족합니다. 크레딧을 확인해 주세요.",
   "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   "AI service temporarily unavailable": "AI 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.",
+  "AI service timeout": "AI 응답이 너무 오래 걸립니다. 다시 시도해 주세요.",
+  "YouTube API timeout": "YouTube 응답이 너무 오래 걸립니다. 다시 시도해 주세요.",
   "Failed to parse analysis result": "분석 결과를 처리하지 못했습니다. 다시 시도해 주세요.",
   "Failed to reach YouTube API": "YouTube 서비스에 연결할 수 없습니다. 네트워크를 확인해 주세요.",
   "Failed to reach AI service": "AI 서비스에 연결할 수 없습니다. 네트워크를 확인해 주세요.",
 };
+
+function mapErrorMessage(errorCode: string): string {
+  return ERROR_MESSAGES[errorCode] ?? "예기치 않은 오류가 발생했습니다. 다시 시도해 주세요.";
+}
+
+const API_KEY_ERROR_CODES = new Set([
+  "Invalid Anthropic API key",
+  "YouTube API error",  // 400 badRequest는 대부분 키 문제
+]);
+
+function isApiKeyError(errorCode: string): boolean {
+  return API_KEY_ERROR_CODES.has(errorCode);
+}
 ```
 
 ---
@@ -490,7 +625,12 @@ const ERROR_MESSAGES: Record<string, string> = {
 | 동일 댓글 반복 (스팸) | Claude 분석 | Claude가 요약 시 자연스럽게 처리. 필터링 불필요. |
 | Claude가 코드 펜스로 JSON 감싸기 | API Route | `JSON.parse` 전에 ` ```json ``` ` 패턴 제거하는 방어 코드 추가. |
 | Claude가 JSON 외 텍스트 포함 | API Route | 응답 텍스트에서 첫 `{`부터 마지막 `}`까지 추출 시도. 실패 시 500 에러. |
-| sentiment 합계가 100이 아님 | API Route | 클라이언트에서 정규화 (각 값을 합으로 나누어 100으로 맞춤). |
-| YouTube Shorts URL | 클라이언트 | `youtube.com/shorts/VIDEO_ID` 패턴도 extractVideoId에서 지원. |
-| 사용자가 분석 중 URL 재입력 | 클라이언트 | loading 상태에서 "분석" 버튼 비활성화하여 중복 요청 방지. |
-| localStorage 접근 불가 (시크릿 모드 등) | 클라이언트 | try/catch로 감싸고, 실패 시 API 키를 세션 중에만 메모리에 유지. |
+| sentiment 합계가 100이 아님 | 클라이언트 | 정규화: 각 값을 합으로 나누고 100을 곱하여 반올림. |
+| YouTube Shorts URL | 클라이언트 | `youtube.com/shorts/VIDEO_ID` 패턴을 extractVideoId에서 지원. |
+| 사용자가 분석 중 URL 재입력 시도 | 클라이언트 | loading 상태에서 URL 입력 필드와 분석 버튼 모두 disabled. |
+| localStorage 접근 불가 (시크릿 모드) | 클라이언트 | try/catch로 감싸고, 실패 시 메모리에만 유지. 설정 패널에 안내 표시. |
+| URL 앞뒤 공백 | 클라이언트 | 분석 시작 시 trim() 처리. |
+| http:// URL 입력 | 클라이언트 | extractVideoId가 http://도 지원. |
+| www 없는 URL (youtube.com vs www.youtube.com) | 클라이언트 | 정규식이 www 유무 모두 매칭. |
+| API Route 타임아웃 | API Route | YouTube 15초, Claude 30초 타임아웃. AbortSignal.timeout() 사용. |
+| 분석 중 탭 전환/백그라운드 | 클라이언트 | 별도 처리 없음. fetch는 백그라운드에서 계속 진행. 탭으로 돌아오면 결과 표시. |
