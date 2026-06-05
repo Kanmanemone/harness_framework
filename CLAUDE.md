@@ -1,14 +1,14 @@
-# 프로젝트: {프로젝트명}
+# 프로젝트: YouTube Comment Analyzer
 
 ## 기술 스택
-- {프레임워크 (예: Next.js 15)}
-- {언어 (예: TypeScript strict mode)}
-- {스타일링 (예: Tailwind CSS)}
+- Next.js 15 (App Router)
+- TypeScript strict mode
+- Tailwind CSS 4
 
 ## 아키텍처 규칙
-- CRITICAL: {절대 지켜야 할 규칙 1 (예: 모든 API 로직은 app/api/ 라우트 핸들러에서만 처리)}
-- CRITICAL: {절대 지켜야 할 규칙 2 (예: 클라이언트 컴포넌트에서 직접 외부 API를 호출하지 말 것)}
-- {일반 규칙 (예: 컴포넌트는 components/ 폴더에, 타입은 types/ 폴더에 분리)}
+- CRITICAL: 모든 외부 API 호출(YouTube Data API, Anthropic API)은 app/api/ 라우트 핸들러에서만 처리
+- CRITICAL: 클라이언트 컴포넌트에서 직접 외부 API를 호출하지 말 것 (CORS 이슈 및 키 노출 방지)
+- 컴포넌트는 components/, 타입은 types/, 유틸리티는 lib/, API 호출 래퍼는 services/ 폴더에 분리
 
 ## 개발 프로세스
 - CRITICAL: 새 기능 구현 시 반드시 테스트를 먼저 작성하고, 테스트가 통과하는 구현을 작성할 것 (TDD)
