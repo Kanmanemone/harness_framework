@@ -1,0 +1,1265 @@
+
+❯ 더 리뷰하고 개선점 찾아줘. 분명히 더 필요한 부분이 있을 거야. 특히 PRD,   
+  Architecture, ADR 이 세 개는 더 채워줘야 돼. 더 enrich하게 만들어야 돼.   
+  디테일 하나도 빠져있으면 안 되고, 에러 케이스, 엣지 케이스, 에러 핸들링   
+  하나도 빠져 있으면 안 돼.                                                 
+
+● 현재 문서들을 다시 꼼꼼히 읽고 빠진 부분을 찾아보겠습니다.
+
+● Read 3 files (ctrl+o to expand)
+
+● 빠진 부분이 많습니다. PRD에 사용자 시나리오, 수용 기준, 제약사항이 없고,
+  ARCHITECTURE에 API 명세, 에러 처리 전략, 타입 정의, 엣지 케이스가 없고, ADR에
+  댓글 수집 전략, 프롬프트 설계 등 핵심 결정이 누락되어 있습니다.
+  보강하겠습니다.
+
+● Write(docs\PRD.md)
+  ⎿  Added 191 lines, removed 24 lines
+        1 -# PRD: YouTube Comment Analyzer                              
+        2 -                                                             
+        3 -## 목표                                                      
+        4 -YouTube 영상 URL만 입력하면 댓글을 자동 수집하고 AI로 센티먼트
+          - 분석하여, 크리에이터가 시청자 반응을 한눈에 파악할 수 있는 리
+          -포트를 생성한다.                                             
+        5 -                                                             
+        6 -## 사용자                                                    
+        7 -YouTube 크리에이터 및 콘텐츠 제작자. 자신의 영상에 대한 시청자
+          - 피드백을 빠르게 파악하고 싶은 사람.                         
+        8 -                                                             
+        9 -## 핵심 기능                                                 
+       10 -1. YouTube URL 입력 → 영상 댓글 자동 수집 (최대 100개, 관련도 
+          -순)                                                          
+       11 -2. Claude AI를 활용한 댓글 센티먼트 분석 (긍정/중립/부정 비율)
+          -                                                              
+       12 -3. 분석 리포트 표시: 전체 요약, 센티먼트 비율 차트, 잘하고 있 
+          -는 점(최대 5개), 개선할 점(최대 5개), 대표 댓글 인용         
+       13 -                                                             
+       14 -## MVP 제외 사항                                             
+       15 -- 로그인/회원가입 기능                                       
+       16 -- 데이터베이스 및 분석 히스토리 저장                         
+       17 -- 다국어 UI (분석 결과는 댓글 언어에 맞춰 자동 대응)         
+       18 -- 여러 영상 비교 분석                                        
+       19 -- 댓글 시간대별 추이 분석                                    
+       20 -                                                             
+       21 -## 디자인                                                    
+       22 -- 다크모드 고정, 미니멀                                      
+       23 -- 무채색 기반 + 센티먼트 표시용 시맨틱 색상 (녹색=긍정, 빨강= 
+          -부정, 회색=중립)                                             
+       24 -- 단일 페이지 구성 (입력 → 로딩 → 리포트 상태 전환)          
+        1 +# PRD: YouTube Comment Analyzer                               
+        2 +                                                              
+        3 +## 목표                                                       
+        4 +YouTube 영상 URL만 입력하면 댓글을 자동 수집하고 AI로 센티먼트
+          + 분석하여, 크리에이터가 시청자 반응을 한눈에 파악할 수 있는 리
+          +포트를 생성한다.                                              
+        5 +                                                              
+        6 +## 사용자                                                     
+        7 +YouTube 크리에이터 및 콘텐츠 제작자. 자신의 영상에 대한 시청자
+          + 피드백을 빠르게 파악하고 싶은 사람.                          
+        8 +                                                              
+        9 +## 사전 준비                                                  
+       10 +사용자는 다음 두 가지 API 키를 직접 발급받아야 한다:          
+       11 +1. **YouTube Data API v3 키**: [Google Cloud Console](https://
+          +console.cloud.google.com/)에서 프로젝트 생성 → YouTube Data AP
+          +I v3 활성화 → API 키 발급. 일일 무료 할당량 10,000 유닛 (comme
+          +ntThreads.list 1회 = 1 유닛).                                 
+       12 +2. **Anthropic API 키**: [Anthropic Console](https://console.a
+          +nthropic.com/)에서 계정 생성 → API 키 발급. 사용량 기반 과금. 
+       13 +                                                              
+       14 +---                                                           
+       15 +                                                              
+       16 +## 핵심 기능                                                  
+       17 +                                                              
+       18 +### 기능 1: YouTube URL 입력 및 댓글 수집                     
+       19 +YouTube 영상 URL을 입력하면 해당 영상의 댓글을 자동으로 수집한
+          +다.                                                           
+       20 +                                                              
+       21 +**지원하는 URL 형식:**                                        
+       22 +- `https://www.youtube.com/watch?v=VIDEO_ID`                  
+       23 +- `https://youtu.be/VIDEO_ID`                                 
+       24 +- `https://www.youtube.com/embed/VIDEO_ID`                    
+       25 +- `https://www.youtube.com/v/VIDEO_ID`                        
+       26 +- 위 형식에 추가 쿼리 파라미터(`&t=`, `&list=` 등)가 붙어도 동
+          +작                                                            
+       27 +                                                              
+       28 +**수집 규칙:**                                                
+       29 +- 최대 100개 댓글 수집 (YouTube API `maxResults` 상한)        
+       30 +- 관련도순(`order=relevance`) 정렬 — 좋아요 많고 답글 많은 의 
+          +미 있는 댓글 우선                                             
+       31 +- 최상위 댓글만 수집 (대댓글 제외)                            
+       32 +- 일반 텍스트(`textFormat=plainText`) 형식으로 가져옴         
+       33 +                                                              
+       34 +**수용 기준:**                                                
+       35 +- 유효한 YouTube URL 입력 시 댓글이 수집되어야 한다           
+       36 +- 댓글 수집 중 로딩 상태가 UI에 표시되어야 한다               
+       37 +- 수집된 댓글 수가 리포트에 표시되어야 한다                   
+       38 +                                                              
+       39 +### 기능 2: AI 센티먼트 분석                                  
+       40 +수집된 댓글을 Claude AI에 전송하여 센티먼트를 분석한다.       
+       41 +                                                              
+       42 +**분석 항목:**                                                
+       43 +- 전체 요약 (1-2문장)                                         
+       44 +- 센티먼트 비율: 긍정/중립/부정 퍼센트 (합계 100%)            
+       45 +- 잘하고 있는 점: 최대 5개, 구체적이고 댓글에 근거한 내용     
+       46 +- 개선할 점: 최대 5개, 구체적이고 댓글에 근거한 내용          
+       47 +- 대표 댓글: 긍정/중립/부정 각 2-3개, 원문 인용               
+       48 +                                                              
+       49 +**분석 언어:**                                                
+       50 +- 댓글이 한국어면 분석도 한국어로, 영어면 영어로. 댓글의 주 언
+          +어를 따라간다.                                                
+       51 +                                                              
+       52 +**수용 기준:**                                                
+       53 +- 분석 결과가 JSON 형식으로 파싱 가능해야 한다                
+       54 +- 센티먼트 비율의 합계가 100이어야 한다                       
+       55 +- 대표 댓글은 실제 수집된 댓글에서만 인용해야 한다            
+       56 +- 분석 중 로딩 상태가 UI에 표시되어야 한다                    
+       57 +                                                              
+       58 +### 기능 3: 리포트 표시                                       
+       59 +분석 결과를 시각적으로 보기 좋은 리포트로 렌더링한다.         
+       60 +                                                              
+       61 +**리포트 구성 (위→아래 순서):**                               
+       62 +1. 전체 요약 텍스트                                           
+       63 +2. 센티먼트 비율 가로 바 차트 (긍정=녹색, 중립=회색, 부정=빨강
+          +)                                                             
+       64 +3. "잘하고 있는 점" 카드 (불릿 리스트)                        
+       65 +4. "개선할 점" 카드 (불릿 리스트)                             
+       66 +5. "대표 댓글" 섹션 (센티먼트별 그룹)                         
+       67 +                                                              
+       68 +**수용 기준:**                                                
+       69 +- 리포트가 화면에 렌더링되어야 한다                           
+       70 +- "다른 영상 분석하기" 버튼으로 초기 상태로 돌아갈 수 있어야  
+          +한다                                                          
+       71 +                                                              
+       72 +### 기능 4: API 키 관리                                       
+       73 +사용자가 API 키를 입력하고 브라우저에 저장한다.               
+       74 +                                                              
+       75 +**동작:**                                                     
+       76 +- 앱 최초 진입 시 API 키가 없으면 설정 패널이 자동으로 열린다 
+       77 +- API 키는 localStorage에 저장하여 재방문 시 유지한다         
+       78 +- 설정 패널은 접었다 펼 수 있다                               
+       79 +- 저장된 키 옆에 체크마크를 표시한다                          
+       80 +- 키 입력 필드는 password 타입으로 마스킹한다                 
+       81 +                                                              
+       82 +**수용 기준:**                                                
+       83 +- API 키를 입력하고 저장하면 localStorage에 저장되어야 한다   
+       84 +- 페이지를 새로고침해도 키가 유지되어야 한다                  
+       85 +- 키가 없는 상태에서 분석 버튼을 누르면 에러 메시지가 표시되어
+          +야 한다                                                       
+       86 +                                                              
+       87 +---                                                           
+       88 +                                                              
+       89 +## 사용자 시나리오                                            
+       90 +                                                              
+       91 +### 시나리오 1: 정상 흐름 (첫 사용)                           
+       92 +1. 사용자가 앱에 접속한다                                     
+       93 +2. API 키가 없으므로 설정 패널이 자동으로 열린다              
+       94 +3. YouTube API 키와 Anthropic API 키를 입력하고 저장한다      
+       95 +4. YouTube 영상 URL을 입력하고 "분석" 버튼을 클릭한다         
+       96 +5. 로딩 상태가 3단계로 표시된다 (댓글 수집 → 분석 중 → 리포트 
+          +생성)                                                         
+       97 +6. 리포트가 표시된다                                          
+       98 +7. "다른 영상 분석하기" 버튼을 클릭하면 URL 입력으로 돌아간다 
+       99 +                                                              
+      100 +### 시나리오 2: 정상 흐름 (재방문)                            
+      101 +1. 사용자가 앱에 재접속한다                                   
+      102 +2. localStorage에서 API 키를 자동으로 불러온다                
+      103 +3. 설정 패널은 접힌 상태로 시작한다                           
+      104 +4. YouTube URL을 입력하고 바로 분석을 시작한다                
+      105 +                                                              
+      106 +### 시나리오 3: 잘못된 URL 입력                               
+      107 +1. 사용자가 YouTube가 아닌 URL 또는 잘못된 형식을 입력한다    
+      108 +2. "분석" 버튼 클릭 시 "유효한 YouTube URL을 입력해 주세요" 인
+          +라인 에러 표시                                                
+      109 +3. API 호출은 발생하지 않는다                                 
+      110 +                                                              
+      111 +### 시나리오 4: 댓글 비활성화 영상                            
+      112 +1. 사용자가 댓글이 꺼진 영상의 URL을 입력한다                 
+      113 +2. YouTube API가 403 에러를 반환한다                          
+      114 +3. "이 영상은 댓글이 비활성화되어 있습니다" 에러 표시         
+      115 +                                                              
+      116 +### 시나리오 5: 댓글 0개 영상                                 
+      117 +1. 사용자가 댓글이 없는 영상의 URL을 입력한다                 
+      118 +2. 댓글 수집 결과가 빈 배열이다                               
+      119 +3. Claude 분석을 호출하지 않고 "이 영상에 댓글이 없습니다" 에 
+          +러 표시                                                       
+      120 +                                                              
+      121 +### 시나리오 6: API 키 오류                                   
+      122 +1. 사용자가 잘못된 YouTube API 키를 입력한 상태에서 분석을 시 
+          +작한다                                                        
+      123 +2. YouTube API가 400 에러를 반환한다                          
+      124 +3. "YouTube API 키가 유효하지 않습니다. 키를 확인해 주세요."  
+          +에러 표시                                                     
+      125 +                                                              
+      126 +### 시나리오 7: API 할당량 초과                               
+      127 +1. YouTube API 일일 할당량을 모두 소진한 상태에서 분석을 시작 
+          +한다                                                          
+      128 +2. YouTube API가 403 + `quotaExceeded` 에러를 반환한다        
+      129 +3. "YouTube API 일일 할당량을 초과했습니다. 내일 다시 시도해  
+          +주세요." 에러 표시                                            
+      130 +                                                              
+      131 +### 시나리오 8: 비공개/삭제된 영상                            
+      132 +1. 사용자가 비공개이거나 삭제된 영상의 URL을 입력한다         
+      133 +2. YouTube API가 404 또는 빈 결과를 반환한다                  
+      134 +3. "영상을 찾을 수 없습니다. URL을 확인해 주세요." 에러 표시  
+      135 +                                                              
+      136 +### 시나리오 9: 네트워크 오류                                 
+      137 +1. 분석 도중 네트워크 연결이 끊긴다                           
+      138 +2. fetch가 실패한다                                           
+      139 +3. "네트워크 오류가 발생했습니다. 연결을 확인하고 다시 시도해 
+          +주세요." 에러 표시                                            
+      140 +                                                              
+      141 +### 시나리오 10: Claude API 응답 파싱 실패                    
+      142 +1. Claude가 유효하지 않은 JSON을 반환한다                     
+      143 +2. JSON.parse가 실패한다                                      
+      144 +3. "분석 결과를 처리하지 못했습니다. 다시 시도해 주세요." 에러
+          + 표시                                                         
+      145 +                                                              
+      146 +---                                                           
+      147 +                                                              
+      148 +## 에러 메시지 매핑                                           
+      149 +                                                              
+      150 +| 원인 | HTTP 상태 | 사용자에게 표시할 메시지 |               
+      151 +|------|-----------|--------------------------|               
+      152 +| 유효하지 않은 YouTube URL | (클라이언트 검증) | 유효한 YouTu
+          +be URL을 입력해 주세요. |                                     
+      153 +| API 키 미설정 | (클라이언트 검증) | API 키를 먼저 설정해 주 
+          +세요. |                                                       
+      154 +| YouTube API 키 무효 | 400 | YouTube API 키가 유효하지 않습니
+          +다. 키를 확인해 주세요. |                                     
+      155 +| YouTube API 할당량 초과 | 403 (quotaExceeded) | YouTube API 
+          +일일 할당량을 초과했습니다. 내일 다시 시도해 주세요. |        
+      156 +| 댓글 비활성화 | 403 (commentsDisabled) | 이 영상은 댓글이 비
+          +활성화되어 있습니다. |                                        
+      157 +| 영상 없음/비공개 | 404 | 영상을 찾을 수 없습니다. URL을 확인
+          +해 주세요. |                                                  
+      158 +| 댓글 0개 | 200 (빈 배열) | 이 영상에 댓글이 없습니다. |     
+      159 +| Anthropic API 키 무효 | 401 | Anthropic API 키가 유효하지 않
+          +습니다. 키를 확인해 주세요. |                                 
+      160 +| Anthropic API 잔액 부족 | 400 (insufficient_quota) | Anthrop
+          +ic API 잔액이 부족합니다. 크레딧을 확인해 주세요. |           
+      161 +| Anthropic 레이트 리밋 | 429 | 요청이 너무 많습니다. 잠시 후 
+          +다시 시도해 주세요. |                                         
+      162 +| Anthropic 서버 오류 | 500/529 | AI 서비스에 일시적인 문제가 
+          +있습니다. 잠시 후 다시 시도해 주세요. |                       
+      163 +| Claude JSON 파싱 실패 | (서버 내부) | 분석 결과를 처리하지  
+          +못했습니다. 다시 시도해 주세요. |                             
+      164 +| 네트워크 오류 | (fetch 실패) | 네트워크 오류가 발생했습니다.
+          + 연결을 확인하고 다시 시도해 주세요. |                        
+      165 +| 알 수 없는 오류 | 기타 | 예기치 않은 오류가 발생했습니다. 다
+          +시 시도해 주세요. |                                           
+      166 +                                                              
+      167 +---                                                           
+      168 +                                                              
+      169 +## 제약사항                                                   
+      170 +- 댓글 수집 상한: 100개 (YouTube API `maxResults` 최대값이 100
+          +이며, 비용과 분석 품질의 균형점)                              
+      171 +- Claude 컨텍스트: 100개 댓글은 약 10,000~30,000 토큰. Sonnet 
+          +의 입력 한도(200K) 내에서 충분히 처리 가능                    
+      172 +- Claude 응답 제한: `max_tokens: 2048` (리포트 JSON에 충분한  
+          +크기)                                                         
+      173 +- YouTube API 일일 할당량: 10,000 유닛 (무료 티어). 1회 분석 =
+          + 1 유닛이므로 하루 최대 ~10,000회 분석 가능                   
+      174 +- localStorage 용량: API 키 2개 저장에 ~200바이트. 브라우저 lo
+          +calStorage 한도(5MB)와 무관                                   
+      175 +                                                              
+      176 +## MVP 제외 사항                                              
+      177 +- 로그인/회원가입 기능                                        
+      178 +- 데이터베이스 및 분석 히스토리 저장                          
+      179 +- 다국어 UI (분석 결과는 댓글 언어에 맞춰 자동 대응하지만, UI 
+          +텍스트는 한국어 고정)                                         
+      180 +- 여러 영상 비교 분석                                         
+      181 +- 댓글 시간대별 추이 분석                                     
+      182 +- 대댓글 수집 및 분석                                         
+      183 +- 댓글 페이지네이션 (100개 초과 수집)                         
+      184 +- 분석 결과 내보내기 (PDF, CSV 등)                            
+      185 +- 실시간 스트리밍 응답 (Claude 응답을 한 번에 수신)           
+      186 +                                                              
+      187 +## 디자인                                                     
+      188 +- 다크모드 고정, 미니멀                                       
+      189 +- 무채색 기반 + 센티먼트 표시용 시맨틱 색상 (녹색=긍정, 빨강= 
+          +부정, 회색=중립)                                              
+      190 +- 단일 페이지 구성 (입력 → 로딩 → 리포트 상태 전환)           
+      191 +- 반응형 불필요 (데스크탑 우선, 모바일 대응은 MVP 이후)       
+
+● Write(docs\ARCHITECTURE.md)
+  ⎿  Added 496 lines, removed 66 lines
+        1 -# 아키텍처                                                   
+        2 -                                                             
+        3 -## 디렉토리 구조                                             
+        4 -```                                                          
+        5 -src/                                                         
+        6 -├── app/                                                     
+        7 -│   ├── layout.tsx                    # 루트 레이아웃 (메타데 
+          -이터, 글로벌 스타일)                                         
+        8 -│   ├── page.tsx                      # 메인 페이지 (단일 페이
+          -지 앱, Client Component)                                     
+        9 -│   ├── globals.css                   # Tailwind 디렉티브    
+       10 -│   └── api/                                                 
+       11 -│       ├── youtube/comments/                                
+       12 -│       │   └── route.ts              # YouTube Data API v3 프
+          -록시                                                         
+       13 -│       └── analyze/                                         
+       14 -│           └── route.ts              # Anthropic Claude API  
+          -프록시                                                       
+       15 -├── components/                                              
+       16 -│   ├── ApiKeySettings.tsx            # API 키 입력 패널 (접을
+          - 수 있음)                                                    
+       17 -│   ├── UrlInput.tsx                  # YouTube URL 입력 + 분 
+          -석 버튼                                                      
+       18 -│   ├── LoadingState.tsx              # 3단계 진행 표시기    
+       19 -│   ├── ReportView.tsx                # 리포트 전체 컨테이너 
+       20 -│   ├── SentimentChart.tsx            # 센티먼트 비율 바 (CSS 
+          -only)                                                        
+       21 -│   ├── InsightCard.tsx               # 강점/개선점 카드 (재사
+          -용)                                                          
+       22 -│   └── CommentList.tsx               # 대표 댓글 목록       
+       23 -├── types/                                                   
+       24 -│   └── index.ts                      # 모든 TypeScript 인터페
+          -이스                                                         
+       25 -├── lib/                                                     
+       26 -│   ├── youtube.ts                    # YouTube URL 파싱, vide
+          -oId 추출                                                     
+       27 -│   ├── storage.ts                    # localStorage 헬퍼 (API
+          - 키 저장/조회)                                               
+       28 -│   └── constants.ts                  # Claude 프롬프트 템플릿
+          -, 설정 상수                                                  
+       29 -└── services/                                                
+       30 -    ├── youtubeService.ts             # /api/youtube/comments 
+          -호출 래퍼                                                    
+       31 -    └── analyzeService.ts             # /api/analyze 호출 래퍼
+          -                                                              
+       32 -```                                                          
+       33 -                                                             
+       34 -## 패턴                                                      
+       35 -- `page.tsx`만 Client Component (`"use client"`). 나머지는 필 
+          -요에 따라 결정.                                              
+       36 -- API 라우트는 외부 API(YouTube, Anthropic)에 대한 서버사이드 
+          -프록시 역할. 클라이언트에서 직접 외부 API를 호출하지 않는다. 
+       37 -- Anthropic SDK를 사용하지 않고 `fetch`로 직접 Messages API를 
+          -호출한다.                                                    
+       38 -- 외부 UI/차트 라이브러리 없이 Tailwind CSS만으로 UI를 구성한 
+          -다.                                                          
+       39 -                                                             
+       40 -## 데이터 흐름                                               
+       41 -```                                                          
+       42 -사용자: YouTube URL 입력                                     
+       43 -    ↓                                                        
+       44 -Client (page.tsx): videoId 추출 + API 키 확인                
+       45 -    ↓                                                        
+       46 -GET /api/youtube/comments?videoId=...&apiKey=...             
+       47 -    ↓                                                        
+       48 -API Route → YouTube Data API v3 (commentThreads.list) → 댓글  
+          -변환                                                         
+       49 -    ↓                                                        
+       50 -Client: 댓글 수신                                            
+       51 -    ↓                                                        
+       52 -POST /api/analyze { comments, apiKey }                       
+       53 -    ↓                                                        
+       54 -API Route → Anthropic Messages API (claude-sonnet-4-20250514) 
+          -→ JSON 리포트 파싱                                           
+       55 -    ↓                                                        
+       56 -Client: AnalysisReport 수신 → ReportView 렌더링              
+       57 -```                                                          
+       58 -                                                             
+       59 -## 상태 관리                                                 
+       60 -- 서버 상태: 없음 (DB 미사용)                                
+       61 -- 클라이언트 상태: `useState`로 관리                         
+       62 -  - `phase`: `"idle"` | `"loading"` | `"report"` | `"error"` —
+          - 현재 앱 단계                                                
+       63 -  - `report`: `AnalysisReport | null` — 분석 결과            
+       64 -  - `error`: `string | null` — 에러 메시지                   
+       65 -  - `loadingSteps`: 3단계 진행 상태 (댓글 수집 → 분석 중 → 리 
+          -포트 생성)                                                   
+       66 -- API 키: `localStorage`에 저장. `lib/storage.ts`를 통해 접근.
+          -                                                              
+        1 +# 아키텍처                                                    
+        2 +                                                              
+        3 +## 디렉토리 구조                                              
+        4 +```                                                           
+        5 +src/                                                          
+        6 +├── app/                                                      
+        7 +│   ├── layout.tsx                    # 루트 레이아웃 (메타데 
+          +이터, 글로벌 스타일)                                          
+        8 +│   ├── page.tsx                      # 메인 페이지 (단일 페이
+          +지 앱, Client Component)                                      
+        9 +│   ├── globals.css                   # Tailwind 디렉티브     
+       10 +│   └── api/                                                  
+       11 +│       ├── youtube/comments/                                 
+       12 +│       │   └── route.ts              # YouTube Data API v3 프
+          +록시                                                          
+       13 +│       └── analyze/                                          
+       14 +│           └── route.ts              # Anthropic Claude API  
+          +프록시                                                        
+       15 +├── components/                                               
+       16 +│   ├── ApiKeySettings.tsx            # API 키 입력 패널 (접을
+          + 수 있음)                                                     
+       17 +│   ├── UrlInput.tsx                  # YouTube URL 입력 + 분 
+          +석 버튼                                                       
+       18 +│   ├── LoadingState.tsx              # 3단계 진행 표시기     
+       19 +│   ├── ReportView.tsx                # 리포트 전체 컨테이너  
+       20 +│   ├── SentimentChart.tsx            # 센티먼트 비율 바 (CSS 
+          +only)                                                         
+       21 +│   ├── InsightCard.tsx               # 강점/개선점 카드 (재사
+          +용)                                                           
+       22 +│   └── CommentList.tsx               # 대표 댓글 목록        
+       23 +├── types/                                                    
+       24 +│   └── index.ts                      # 모든 TypeScript 인터페
+          +이스                                                          
+       25 +├── lib/                                                      
+       26 +│   ├── youtube.ts                    # YouTube URL 파싱, vide
+          +oId 추출                                                      
+       27 +│   ├── storage.ts                    # localStorage 헬퍼 (API
+          + 키 저장/조회)                                                
+       28 +│   └── constants.ts                  # Claude 프롬프트 템플릿
+          +, 설정 상수                                                   
+       29 +└── services/                                                 
+       30 +    ├── youtubeService.ts             # /api/youtube/comments 
+          +호출 래퍼                                                     
+       31 +    └── analyzeService.ts             # /api/analyze 호출 래퍼
+       32 +```                                                           
+       33 +                                                              
+       34 +## 패턴                                                       
+       35 +- `page.tsx`만 Client Component (`"use client"`). 하위 컴포넌 
+          +트도 page.tsx에서 렌더되므로 자동으로 Client Component로 동작 
+          +한다.                                                         
+       36 +- API 라우트는 외부 API(YouTube, Anthropic)에 대한 서버사이드 
+          +프록시 역할. 클라이언트에서 직접 외부 API를 호출하지 않는다.  
+       37 +- Anthropic SDK를 사용하지 않고 `fetch`로 직접 Messages API를 
+          +호출한다.                                                     
+       38 +- 외부 UI/차트 라이브러리 없이 Tailwind CSS만으로 UI를 구성한 
+          +다.                                                           
+       39 +                                                              
+       40 +---                                                           
+       41 +                                                              
+       42 +## 타입 정의 (`types/index.ts`)                               
+       43 +                                                              
+       44 +### YouTube 관련                                              
+       45 +```typescript                                                 
+       46 +interface Comment {                                           
+       47 +  id: string;              // YouTube 댓글 고유 ID            
+       48 +  text: string;            // 댓글 본문 (plainText)           
+       49 +  author: string;          // 작성자 이름                     
+       50 +  likeCount: number;       // 좋아요 수                       
+       51 +  publishedAt: string;     // 작성 시각 (ISO 8601)            
+       52 +}                                                             
+       53 +                                                              
+       54 +interface YouTubeCommentsResponse {                           
+       55 +  comments: Comment[];                                        
+       56 +  totalResults: number;    // YouTube가 보고하는 전체 댓글 수 
+       57 +  videoId: string;                                            
+       58 +}                                                             
+       59 +```                                                           
+       60 +                                                              
+       61 +### 분석 결과                                                 
+       62 +```typescript                                                 
+       63 +interface SentimentRatio {                                    
+       64 +  positive: number;        // 0-100 (퍼센트)                  
+       65 +  neutral: number;         // 0-100                           
+       66 +  negative: number;        // 0-100, 세 값의 합은 반드시 100  
+       67 +}                                                             
+       68 +                                                              
+       69 +interface RepresentativeComment {                             
+       70 +  text: string;            // 원문 그대로                     
+       71 +  author: string;          // 작성자 이름                     
+       72 +}                                                             
+       73 +                                                              
+       74 +interface AnalysisReport {                                    
+       75 +  summary: string;                        // 전체 요약 (1-2문 
+          +장)                                                           
+       76 +  sentiment: SentimentRatio;                                  
+       77 +  strengths: string[];                    // 최대 5개         
+       78 +  improvements: string[];                 // 최대 5개         
+       79 +  representativeComments: {                                   
+       80 +    positive: RepresentativeComment[];    // 2-3개            
+       81 +    neutral: RepresentativeComment[];     // 2-3개            
+       82 +    negative: RepresentativeComment[];    // 2-3개            
+       83 +  };                                                          
+       84 +}                                                             
+       85 +```                                                           
+       86 +                                                              
+       87 +### 앱 상태                                                   
+       88 +```typescript                                                 
+       89 +type AppPhase = "idle" | "loading" | "report" | "error";      
+       90 +                                                              
+       91 +interface LoadingStep {                                       
+       92 +  label: string;                                              
+       93 +  status: "pending" | "active" | "done";                      
+       94 +}                                                             
+       95 +                                                              
+       96 +interface ApiKeys {                                           
+       97 +  youtube: string;                                            
+       98 +  anthropic: string;                                          
+       99 +}                                                             
+      100 +                                                              
+      101 +interface ApiError {                                          
+      102 +  error: string;                                              
+      103 +}                                                             
+      104 +```                                                           
+      105 +                                                              
+      106 +---                                                           
+      107 +                                                              
+      108 +## API 명세                                                   
+      109 +                                                              
+      110 +### GET /api/youtube/comments                                 
+      111 +                                                              
+      112 +YouTube Data API v3의 `commentThreads.list`를 프록시한다.     
+      113 +                                                              
+      114 +**Request:**                                                  
+      115 +| 파라미터 | 위치 | 필수 | 설명 |                             
+      116 +|----------|------|------|------|                             
+      117 +| videoId | query | O | YouTube 영상 ID (11자) |              
+      118 +| apiKey | query | O | YouTube Data API v3 키 |               
+      119 +| maxResults | query | X | 수집할 댓글 수 (기본값: 100, 최대: 
+          +100) |                                                        
+      120 +                                                              
+      121 +**Response (200):**                                           
+      122 +```json                                                       
+      123 +{                                                             
+      124 +  "comments": [                                               
+      125 +    {                                                         
+      126 +      "id": "UgxB3...",                                       
+      127 +      "text": "좋은 영상 감사합니다",                         
+      128 +      "author": "홍길동",                                     
+      129 +      "likeCount": 42,                                        
+      130 +      "publishedAt": "2024-01-15T09:30:00Z"                   
+      131 +    }                                                         
+      132 +  ],                                                          
+      133 +  "totalResults": 1523,                                       
+      134 +  "videoId": "dQw4w9WgXcQ"                                    
+      135 +}                                                             
+      136 +```                                                           
+      137 +                                                              
+      138 +**Error Responses:**                                          
+      139 +| 상태 | 조건 | 응답 body |                                   
+      140 +|------|------|-----------|                                   
+      141 +| 400 | videoId 또는 apiKey 누락 | `{ "error": "Missing videoI
+          +d or apiKey" }` |                                             
+      142 +| 400 | YouTube API가 잘못된 키로 거부 | `{ "error": "YouTube 
+          +API error: ..." }` |                                          
+      143 +| 403 | 댓글 비활성화 | `{ "error": "commentsDisabled" }` |   
+      144 +| 403 | 할당량 초과 | `{ "error": "quotaExceeded" }` |        
+      145 +| 404 | 영상 없음 | `{ "error": "videoNotFound" }` |          
+      146 +                                                              
+      147 +**구현 세부사항:**                                            
+      148 +- YouTube API 호출 URL: `https://www.googleapis.com/youtube/v3
+          +/commentThreads?part=snippet&videoId={videoId}&maxResults={max
+          +Results}&order=relevance&textFormat=plainText&key={apiKey}`   
+      149 +- YouTube API 응답에서 `items[].snippet.topLevelComment.snippe
+          +t`의 `textDisplay`, `authorDisplayName`, `likeCount`, `publish
+          +edAt`를 추출하여 `Comment` 형태로 변환한다                    
+      150 +- YouTube API 에러 응답의 `error.errors[0].reason`을 확인하여 
+          +`commentsDisabled`, `quotaExceeded`, `videoNotFound` 등을 구분
+          +한다                                                          
+      151 +                                                              
+      152 +### POST /api/analyze                                         
+      153 +                                                              
+      154 +Anthropic Messages API를 프록시하여 댓글 센티먼트를 분석한다. 
+      155 +                                                              
+      156 +**Request:**                                                  
+      157 +```json                                                       
+      158 +{                                                             
+      159 +  "comments": [Comment, ...],  // Comment[] (최소 1개)        
+      160 +  "apiKey": "sk-ant-..."       // Anthropic API 키            
+      161 +}                                                             
+      162 +```                                                           
+      163 +                                                              
+      164 +**Response (200):**                                           
+      165 +```json                                                       
+      166 +{                                                             
+      167 +  "summary": "전반적으로 긍정적인 반응이 많으며...",          
+      168 +  "sentiment": { "positive": 65, "neutral": 25, "negative": 10
+          + },                                                           
+      169 +  "strengths": ["설명이 명확하다", "편집이 깔끔하다"],        
+      170 +  "improvements": ["음질 개선 필요", "자막 추가 요청"],       
+      171 +  "representativeComments": {                                 
+      172 +    "positive": [{ "text": "...", "author": "..." }],         
+      173 +    "neutral": [{ "text": "...", "author": "..." }],          
+      174 +    "negative": [{ "text": "...", "author": "..." }]          
+      175 +  }                                                           
+      176 +}                                                             
+      177 +```                                                           
+      178 +                                                              
+      179 +**Error Responses:**                                          
+      180 +| 상태 | 조건 | 응답 body |                                   
+      181 +|------|------|-----------|                                   
+      182 +| 400 | comments 또는 apiKey 누락 | `{ "error": "Missing comme
+          +nts or apiKey" }` |                                           
+      183 +| 400 | comments가 빈 배열 | `{ "error": "No comments to analy
+          +ze" }` |                                                      
+      184 +| 401 | Anthropic API 키 무효 | `{ "error": "Invalid Anthropic
+          + API key" }` |                                                
+      185 +| 400 | Anthropic 잔액 부족 | `{ "error": "Insufficient Anthro
+          +pic API credits" }` |                                         
+      186 +| 429 | Anthropic 레이트 리밋 | `{ "error": "Rate limited. Ple
+          +ase try again later." }` |                                    
+      187 +| 500 | Claude JSON 파싱 실패 | `{ "error": "Failed to parse a
+          +nalysis result" }` |                                          
+      188 +| 502 | Anthropic 서버 오류 | `{ "error": "AI service temporar
+          +ily unavailable" }` |                                         
+      189 +                                                              
+      190 +**구현 세부사항:**                                            
+      191 +- Anthropic API 호출: `POST https://api.anthropic.com/v1/messa
+          +ges`                                                          
+      192 +- 헤더: `Content-Type: application/json`, `x-api-key: {apiKey}
+          +`, `anthropic-version: 2023-06-01`                            
+      193 +- 모델: `claude-sonnet-4-20250514`                            
+      194 +- `max_tokens: 2048`                                          
+      195 +- Claude의 텍스트 응답을 `JSON.parse`하여 `AnalysisReport` 객 
+          +체로 변환                                                     
+      196 +- JSON 파싱 실패 시 500 에러를 반환 (재시도 로직은 클라이언트 
+          +에서 사용자가 수동으로)                                       
+      197 +                                                              
+      198 +---                                                           
+      199 +                                                              
+      200 +## Claude 프롬프트 설계 (`lib/constants.ts`)                  
+      201 +                                                              
+      202 +```                                                           
+      203 +You are analyzing YouTube video comments to produce a sentimen
+          +t report.                                                     
+      204 +                                                              
+      205 +Here are {count} comments from the video:                     
+      206 +                                                              
+      207 +[1] (Likes: 42) 좋은 영상 감사합니다                          
+      208 +[2] (Likes: 15) 음질이 좀 아쉽네요                            
+      209 +...                                                           
+      210 +                                                              
+      211 +Analyze these comments and return a JSON object with EXACTLY t
+          +his structure                                                 
+      212 +(no markdown, no code fences, just raw JSON):                 
+      213 +                                                              
+      214 +{                                                             
+      215 +  "summary": "1-2 sentence overall summary",                  
+      216 +  "sentiment": {                                              
+      217 +    "positive": <number 0-100>,                               
+      218 +    "neutral": <number 0-100>,                                
+      219 +    "negative": <number 0-100>                                
+      220 +  },                                                          
+      221 +  "strengths": ["max 5 items"],                               
+      222 +  "improvements": ["max 5 items"],                            
+      223 +  "representativeComments": {                                 
+      224 +    "positive": [{ "text": "exact comment", "author": "name" }
+          +],                                                            
+      225 +    "neutral": [...],                                         
+      226 +    "negative": [...]                                         
+      227 +  }                                                           
+      228 +}                                                             
+      229 +                                                              
+      230 +Rules:                                                        
+      231 +- sentiment percentages must sum to 100                       
+      232 +- Pick 2-3 representative comments per category (only from pro
+          +vided comments)                                               
+      233 +- strengths and improvements should be concrete, not generic  
+      234 +- If comments are in a non-English language, write the analysi
+          +s in that same language                                       
+      235 +- Return ONLY the JSON object, nothing else                   
+      236 +```                                                           
+      237 +                                                              
+      238 +**프롬프트 설계 의도:**                                       
+      239 +- 좋아요 수(`Likes: N`)를 포함하여 Claude가 인기 댓글에 더 높 
+          +은 가중치를 부여하도록 유도                                   
+      240 +- "no markdown, no code fences"를 명시하여 ` ```json ` 래핑 방
+          +지                                                            
+      241 +- "ONLY from provided comments"를 명시하여 Claude가 댓글을 지 
+          +어내는 것을 방지                                              
+      242 +- "Return ONLY the JSON"을 명시하여 부가 설명 없는 순수 JSON  
+          +출력 유도                                                     
+      243 +- 언어 자동 대응: "write the analysis in that same language"  
+      244 +                                                              
+      245 +---                                                           
+      246 +                                                              
+      247 +## 데이터 흐름                                                
+      248 +                                                              
+      249 +### 정상 흐름                                                 
+      250 +```                                                           
+      251 +사용자: YouTube URL 입력 + "분석" 클릭                        
+      252 +    ↓                                                         
+      253 +Client (page.tsx):                                            
+      254 +  1. extractVideoId(url) — videoId 추출. null이면 에러 표시 후
+          + 중단.                                                        
+      255 +  2. getApiKeys() — localStorage에서 키 조회. 빈 값이면 에러  
+          +표시 후 중단.                                                 
+      256 +  3. setPhase("loading"), loadingStep[0] = "active"           
+      257 +    ↓                                                         
+      258 +Client → GET /api/youtube/comments?videoId=...&apiKey=...&maxR
+          +esults=100                                                    
+      259 +    ↓                                                         
+      260 +API Route (youtube/comments/route.ts):                        
+      261 +  1. videoId, apiKey 파라미터 검증                            
+      262 +  2. YouTube Data API v3 호출 (commentThreads.list)           
+      263 +  3. 응답 변환: items[] → Comment[]                           
+      264 +  4. 에러 시: YouTube 에러 reason 파싱 → 적절한 HTTP 상태 + 에
+          +러 메시지 반환                                                
+      265 +    ↓                                                         
+      266 +Client:                                                       
+      267 +  1. 응답 수신. 에러면 setPhase("error") + 에러 메시지 표시.  
+      268 +  2. comments.length === 0 이면 "댓글 없음" 에러 표시 후 중단.
+      269 +  3. loadingStep[0] = "done", loadingStep[1] = "active"       
+      270 +    ↓                                                         
+      271 +Client → POST /api/analyze { comments, apiKey }               
+      272 +    ↓                                                         
+      273 +API Route (analyze/route.ts):                                 
+      274 +  1. comments, apiKey 검증                                    
+      275 +  2. buildAnalysisPrompt(comments) — 프롬프트 조립            
+      276 +  3. Anthropic Messages API 호출 (claude-sonnet-4-20250514, ma
+          +x_tokens: 2048)                                               
+      277 +  4. 응답에서 content[0].text 추출                            
+      278 +  5. JSON.parse — 실패 시 500 에러 반환                       
+      279 +  6. 파싱된 AnalysisReport 반환                               
+      280 +    ↓                                                         
+      281 +Client:                                                       
+      282 +  1. 응답 수신. 에러면 setPhase("error") + 에러 메시지 표시.  
+      283 +  2. setReport(result)                                        
+      284 +  3. loadingStep[1] = "done", loadingStep[2] = "active" → "don
+          +e"                                                            
+      285 +  4. setPhase("report")                                       
+      286 +    ↓                                                         
+      287 +ReportView 렌더링: summary → SentimentChart → InsightCard×2 → 
+          +CommentList                                                   
+      288 +```                                                           
+      289 +                                                              
+      290 +### 에러 흐름                                                 
+      291 +```                                                           
+      292 +어떤 단계에서든 에러 발생 시:                                 
+      293 +  1. catch 블록에서 에러 메시지 추출                          
+      294 +  2. setError(message)                                        
+      295 +  3. setPhase("error")                                        
+      296 +  4. ErrorState 컴포넌트가 에러 메시지 + "다시 시도" 버튼 표시
+      297 +  5. "다시 시도" 클릭 → setPhase("idle"), setError(null)      
+      298 +```                                                           
+      299 +                                                              
+      300 +---                                                           
+      301 +                                                              
+      302 +## 상태 관리                                                  
+      303 +                                                              
+      304 +### 상태 변수                                                 
+      305 +```typescript                                                 
+      306 +const [phase, setPhase] = useState<AppPhase>("idle");         
+      307 +const [url, setUrl] = useState("");                           
+      308 +const [report, setReport] = useState<AnalysisReport | null>(nu
+          +ll);                                                          
+      309 +const [error, setError] = useState<string | null>(null);      
+      310 +const [loadingSteps, setLoadingSteps] = useState<LoadingStep[]
+          +>([]);                                                        
+      311 +const [settingsOpen, setSettingsOpen] = useState(false);      
+      312 +```                                                           
+      313 +                                                              
+      314 +### 상태 전이 다이어그램                                      
+      315 +```                                                           
+      316 +          ┌──────────────────────────────────┐                
+      317 +          │                                  │                
+      318 +          ▼                                  │                
+      319 +        idle ──(분석 클릭)──→ loading         │               
+      320 +          ▲                    │   │         │                
+      321 +          │                    │   │         │                
+      322 +          │              (성공)│   │(실패)    │               
+      323 +          │                    │   │         │                
+      324 +          │                    ▼   ▼         │                
+      325 +          │               report  error      │                
+      326 +          │                  │      │        │                
+      327 +          │     (다른 영상)──┘      │(다시 시도)              
+      328 +          └─────────────────────────┘                         
+      329 +```                                                           
+      330 +                                                              
+      331 +### 유효한 전이만 허용                                        
+      332 +| From | To | 트리거 |                                        
+      333 +|------|----|--------|                                        
+      334 +| idle | loading | "분석" 버튼 클릭 (검증 통과 시) |          
+      335 +| loading | report | 분석 완료 |                              
+      336 +| loading | error | 어떤 단계든 실패 |                        
+      337 +| report | idle | "다른 영상 분석하기" 클릭 |                 
+      338 +| error | idle | "다시 시도" 클릭 |                           
+      339 +                                                              
+      340 +`idle → error`는 없다. URL 검증 실패나 API 키 미설정은 `idle` 
+          +상태에서 인라인 메시지로 처리하고 phase를 변경하지 않는다.    
+      341 +                                                              
+      342 +### 로딩 단계                                                 
+      343 +| 인덱스 | label | 언제 active | 언제 done |                  
+      344 +|--------|-------|-------------|-----------|                  
+      345 +| 0 | "댓글을 수집하고 있습니다..." | 분석 시작 | YouTube API 
+          +응답 수신 |                                                   
+      346 +| 1 | "AI가 댓글을 분석하고 있습니다..." | 댓글 수집 완료 | An
+          +thropic API 응답 수신 |                                       
+      347 +| 2 | "리포트를 생성하고 있습니다..." | 분석 완료 | 리포트 렌 
+          +더링 직전 |                                                   
+      348 +                                                              
+      349 +---                                                           
+      350 +                                                              
+      351 +## 유틸리티 함수                                              
+      352 +                                                              
+      353 +### `lib/youtube.ts` — extractVideoId                         
+      354 +```                                                           
+      355 +입력: YouTube URL 문자열                                      
+      356 +출력: 11자 영상 ID 또는 null                                  
+      357 +                                                              
+      358 +지원 패턴:                                                    
+      359 +  /(?:youtube\.com\/watch\?.*v=)([a-zA-Z0-9_-]{11})/          
+      360 +  /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/                        
+      361 +  /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/              
+      362 +  /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/                  
+      363 +                                                              
+      364 +주의: URL에 &list=, &t=, &index= 등 추가 쿼리가 붙어도 동작해 
+          +야 한다.                                                      
+      365 +YouTube video ID는 항상 정확히 11자이며 [a-zA-Z0-9_-]로 구성된
+          +다.                                                           
+      366 +```                                                           
+      367 +                                                              
+      368 +### `lib/storage.ts` — getApiKeys, saveApiKeys                
+      369 +```                                                           
+      370 +localStorage 키:                                              
+      371 +  "yt-sentiment-youtube-key"   → YouTube API 키               
+      372 +  "yt-sentiment-anthropic-key" → Anthropic API 키             
+      373 +                                                              
+      374 +getApiKeys(): ApiKeys                                         
+      375 +  - SSR 환경(typeof window === "undefined")에서는 빈 문자열 반
+          +환                                                            
+      376 +  - localStorage에서 두 키를 읽어 ApiKeys 객체로 반환         
+      377 +                                                              
+      378 +saveApiKeys(keys: ApiKeys): void                              
+      379 +  - 두 키를 localStorage에 저장                               
+      380 +```                                                           
+      381 +                                                              
+      382 +---                                                           
+      383 +                                                              
+      384 +## 컴포넌트 Props                                             
+      385 +                                                              
+      386 +```typescript                                                 
+      387 +// ApiKeySettings                                             
+      388 +{ open: boolean; onToggle: () => void; onSave: (keys: ApiKeys)
+          + => void }                                                    
+      389 +                                                              
+      390 +// UrlInput                                                   
+      391 +{ value: string; onChange: (v: string) => void; onSubmit: () =
+          +> void; disabled: boolean }                                   
+      392 +                                                              
+      393 +// LoadingState                                               
+      394 +{ steps: LoadingStep[] }                                      
+      395 +                                                              
+      396 +// ReportView                                                 
+      397 +{ report: AnalysisReport; onReset: () => void }               
+      398 +                                                              
+      399 +// SentimentChart                                             
+      400 +{ sentiment: SentimentRatio }                                 
+      401 +                                                              
+      402 +// InsightCard                                                
+      403 +{ title: string; items: string[]; variant: "positive" | "negat
+          +ive" }                                                        
+      404 +                                                              
+      405 +// CommentList                                                
+      406 +{ comments: AnalysisReport["representativeComments"] }        
+      407 +```                                                           
+      408 +                                                              
+      409 +---                                                           
+      410 +                                                              
+      411 +## 에러 처리 전략                                             
+      412 +                                                              
+      413 +### 레이어별 에러 처리                                        
+      414 +                                                              
+      415 +**1. 클라이언트 검증 (page.tsx, API 호출 전)**                
+      416 +| 조건 | 처리 |                                               
+      417 +|------|------|                                               
+      418 +| URL 입력이 비어 있음 | "분석" 버튼 비활성화 (disabled) |    
+      419 +| extractVideoId가 null 반환 | 인라인 에러 "유효한 YouTube URL
+          +을 입력해 주세요" |                                           
+      420 +| API 키가 비어 있음 | 인라인 에러 "API 키를 먼저 설정해 주세 
+          +요" + 설정 패널 자동 열기 |                                   
+      421 +                                                              
+      422 +**2. API Route — YouTube 프록시 (youtube/comments/route.ts)** 
+      423 +| YouTube API 응답 | 우리 API 응답 |                          
+      424 +|------------------|---------------|                          
+      425 +| 200 + items 있음 | 200 + Comment[] 반환 |                   
+      426 +| 200 + items 없음 | 200 + 빈 배열 반환 (클라이언트에서 처리) 
+          +|                                                             
+      427 +| 400 (badRequest) | 400 + `{ error: "YouTube API 키가 유효하 
+          +지 않습니다" }` |                                             
+      428 +| 403 reason=commentsDisabled | 403 + `{ error: "commentsDisab
+          +led" }` |                                                     
+      429 +| 403 reason=quotaExceeded | 403 + `{ error: "quotaExceeded" }
+          +` |                                                           
+      430 +| 404 reason=videoNotFound | 404 + `{ error: "videoNotFound" }
+          +` |                                                           
+      431 +| 기타 에러 | 해당 상태코드 + `{ error: YouTube 에러 메시지 }`
+          + |                                                            
+      432 +| fetch 자체 실패 (네트워크) | 502 + `{ error: "Failed to reac
+          +h YouTube API" }` |                                           
+      433 +                                                              
+      434 +**3. API Route — Claude 프록시 (analyze/route.ts)**           
+      435 +| Anthropic API 응답 | 우리 API 응답 |                        
+      436 +|--------------------|---------------|                        
+      437 +| 200 + 유효한 JSON 텍스트 | 200 + AnalysisReport |           
+      438 +| 200 + JSON 파싱 실패 | 500 + `{ error: "Failed to parse anal
+          +ysis result" }` |                                             
+      439 +| 401 (authentication_error) | 401 + `{ error: "Invalid Anthro
+          +pic API key" }` |                                             
+      440 +| 400 (insufficient_quota) | 400 + `{ error: "Insufficient Ant
+          +hropic API credits" }` |                                      
+      441 +| 429 (rate_limit_error) | 429 + `{ error: "Rate limited" }` |
+      442 +| 500/529 (서버 오류/과부하) | 502 + `{ error: "AI service tem
+          +porarily unavailable" }` |                                    
+      443 +| fetch 자체 실패 (네트워크) | 502 + `{ error: "Failed to reac
+          +h AI service" }` |                                            
+      444 +                                                              
+      445 +**4. 클라이언트 에러 수신 (page.tsx, API 호출 후)**           
+      446 +```typescript                                                 
+      447 +try {                                                         
+      448 +  const { comments } = await fetchComments(videoId, keys.youtu
+          +be);                                                          
+      449 +  // ...                                                      
+      450 +  const result = await analyzeComments(comments, keys.anthropi
+          +c);                                                           
+      451 +  // ...                                                      
+      452 +} catch (err) {                                               
+      453 +  const message = err instanceof Error ? err.message : "예기치
+          + 않은 오류가 발생했습니다";                                   
+      454 +  setError(message);                                          
+      455 +  setPhase("error");                                          
+      456 +}                                                             
+      457 +```                                                           
+      458 +                                                              
+      459 +서비스 레이어(`services/*.ts`)에서 `res.ok`가 아닌 경우 에러 b
+          +ody의 `error` 필드를 추출하여 `throw new Error(에러메시지)`한 
+          +다. 이 메시지가 클라이언트의 에러 메시지 매핑 테이블을 통해 사
+          +용자 친화적 메시지로 변환된다.                                
+      460 +                                                              
+      461 +### 에러 메시지 매핑 (서비스 레이어)                          
+      462 +                                                              
+      463 +서비스 레이어에서 API Route가 반환한 에러 코드를 사용자 메시지
+          +로 변환한다:                                                  
+      464 +                                                              
+      465 +```typescript                                                 
+      466 +const ERROR_MESSAGES: Record<string, string> = {              
+      467 +  "commentsDisabled": "이 영상은 댓글이 비활성화되어 있습니다.
+          +",                                                            
+      468 +  "quotaExceeded": "YouTube API 일일 할당량을 초과했습니다. 내
+          +일 다시 시도해 주세요.",                                      
+      469 +  "videoNotFound": "영상을 찾을 수 없습니다. URL을 확인해 주세
+          +요.",                                                         
+      470 +  "Invalid Anthropic API key": "Anthropic API 키가 유효하지 않
+          +습니다. 키를 확인해 주세요.",                                 
+      471 +  "Insufficient Anthropic API credits": "Anthropic API 잔액이 
+          +부족합니다. 크레딧을 확인해 주세요.",                         
+      472 +  "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해  
+          +주세요.",                                                     
+      473 +  "AI service temporarily unavailable": "AI 서비스에 일시적인 
+          +문제가 있습니다. 잠시 후 다시 시도해 주세요.",                
+      474 +  "Failed to parse analysis result": "분석 결과를 처리하지 못 
+          +했습니다. 다시 시도해 주세요.",                               
+      475 +  "Failed to reach YouTube API": "YouTube 서비스에 연결할 수  
+          +없습니다. 네트워크를 확인해 주세요.",                         
+      476 +  "Failed to reach AI service": "AI 서비스에 연결할 수 없습니 
+          +다. 네트워크를 확인해 주세요.",                               
+      477 +};                                                            
+      478 +```                                                           
+      479 +                                                              
+      480 +---                                                           
+      481 +                                                              
+      482 +## 엣지 케이스 처리                                           
+      483 +                                                              
+      484 +| 케이스 | 발생 시점 | 처리 방법 |                            
+      485 +|--------|-----------|-----------|                            
+      486 +| 댓글이 이모지로만 구성 | Claude 분석 | 프롬프트가 "concrete"
+          +를 요구하므로 Claude가 적절히 분류. 추가 처리 불필요. |       
+      487 +| 댓글에 HTML 엔티티 포함 | YouTube API | `textFormat=plainTex
+          +t`로 요청하므로 HTML 없음. |                                  
+      488 +| 댓글이 매우 긴 경우 (10,000자+) | Claude 분석 | 100개 댓글  
+          +총합이 Sonnet 입력 한도(200K 토큰) 이내이므로 문제없음. |     
+      489 +| 다국어 혼합 댓글 | Claude 분석 | Claude가 주 언어를 감지하여
+          + 해당 언어로 분석. |                                          
+      490 +| 동일 댓글 반복 (스팸) | Claude 분석 | Claude가 요약 시 자연 
+          +스럽게 처리. 필터링 불필요. |                                 
+      491 +| Claude가 코드 펜스로 JSON 감싸기 | API Route | `JSON.parse` 
+          +전에 ` ```json ``` ` 패턴 제거하는 방어 코드 추가. |          
+      492 +| Claude가 JSON 외 텍스트 포함 | API Route | 응답 텍스트에서  
+          +첫 `{`부터 마지막 `}`까지 추출 시도. 실패 시 500 에러. |      
+      493 +| sentiment 합계가 100이 아님 | API Route | 클라이언트에서 정 
+          +규화 (각 값을 합으로 나누어 100으로 맞춤). |                  
+      494 +| YouTube Shorts URL | 클라이언트 | `youtube.com/shorts/VIDEO_
+          +ID` 패턴도 extractVideoId에서 지원. |                         
+      495 +| 사용자가 분석 중 URL 재입력 | 클라이언트 | loading 상태에서 
+          +"분석" 버튼 비활성화하여 중복 요청 방지. |                    
+      496 +| localStorage 접근 불가 (시크릿 모드 등) | 클라이언트 | try/c
+          +atch로 감싸고, 실패 시 API 키를 세션 중에만 메모리에 유지. |  
+
+● Write(docs\ADR.md)
+  ⎿  Added 119 lines, removed 26 lines
+        1 -# Architecture Decision Records                              
+        2 -                                                             
+        3 -## 철학                                                      
+        4 -MVP 속도 최우선. 외부 의존성 최소화. 작동하는 최소 구현을 선택
+          -한다. 개인 도구 수준의 앱이므로 과도한 엔지니어링을 피한다.  
+        5 -                                                             
+        6 ----                                                          
+        7 -                                                             
+        8 -### ADR-001: Next.js App Router 선택                         
+        9 -**결정**: Next.js 15 (App Router)를 프레임워크로 사용한다.   
+       10 -**이유**: Anthropic API는 브라우저에서 직접 호출할 수 없다 (CO
+          -RS 제한). Next.js API Route를 프록시로 활용하면 별도 백엔드 서
+          -버 없이 이 문제를 해결할 수 있다. React 생태계 활용 및 빌드/배
+          -포 편의성도 장점.                                            
+       11 -**트레이드오프**: 서버 기능을 거의 쓰지 않으므로 Vite + React 
+          -대비 번들 크기가 약간 크다. API Route 2개만 사용하므로 수용 가
+          -능한 수준.                                                   
+       12 -                                                             
+       13 -### ADR-002: Claude Sonnet 모델 사용                         
+       14 -**결정**: 센티먼트 분석에 `claude-sonnet-4-20250514` 모델을 사
+          -용한다.                                                      
+       15 -**이유**: 댓글 분석은 복잡한 추론이 아닌 분류+요약 태스크다. S
+          -onnet은 이 수준의 작업에 충분한 성능을 제공하면서 Opus 대비 비
+          -용이 훨씬 낮다. 100개 댓글 분석 시 응답 시간도 짧다.         
+       16 -**트레이드오프**: 매우 미묘한 맥락 분석이 필요한 경우 Opus가  
+          -나을 수 있으나, MVP에서는 Sonnet으로 충분하다.               
+       17 -                                                             
+       18 -### ADR-003: 사용자 API 키 직접 입력 방식                    
+       19 -**결정**: YouTube API 키와 Anthropic API 키를 사용자가 UI에서 
+          -직접 입력하고, localStorage에 저장한다.                      
+       20 -**이유**: 서버에 키를 저장하지 않으므로 별도 인증/DB가 불필요 
+          -하다. 사용자가 자신의 API 할당량을 사용하므로 운영 비용이 0이 
+          -다. 개인 도구 용도에 적합하다.                               
+       21 -**트레이드오프**: 사용자가 직접 API 키를 발급받아야 하는 진입 
+          -장벽이 있다. localStorage는 XSS에 취약할 수 있으나, 개인 도구 
+          -이므로 수용 가능.                                            
+       22 -                                                             
+       23 -### ADR-004: 외부 런타임 의존성 제로                         
+       24 -**결정**: Next.js + React 외에 런타임 의존성을 추가하지 않는다
+          -. Anthropic SDK, 차트 라이브러리, 상태 관리 라이브러리를 사용 
+          -하지 않는다.                                                 
+       25 -**이유**: Anthropic API는 단순 fetch 호출로 충분하다 (헤더 3개
+          - + JSON body). 센티먼트 차트는 CSS flex로 구현 가능하다. 앱 상
+          -태는 useState 몇 개로 관리 가능하다. 의존성이 적을수록 유지보 
+          -수가 쉽다.                                                   
+       26 -**트레이드오프**: SDK가 제공하는 타입 안전성, 자동 재시도, 스 
+          -트리밍 등의 편의 기능을 포기한다. MVP 범위에서는 이런 기능이  
+          -불필요하다.                                                  
+        1 +# Architecture Decision Records                               
+        2 +                                                              
+        3 +## 철학                                                       
+        4 +MVP 속도 최우선. 외부 의존성 최소화. 작동하는 최소 구현을 선택
+          +한다. 개인 도구 수준의 앱이므로 과도한 엔지니어링을 피한다. 모
+          +든 결정은 "이것 없이도 MVP가 동작하는가?"를 기준으로 판단한다.
+        5 +                                                              
+        6 +---                                                           
+        7 +                                                              
+        8 +### ADR-001: Next.js App Router 선택                          
+        9 +**상태**: 확정                                                
+       10 +**결정**: Next.js 15 (App Router)를 프레임워크로 사용한다.    
+       11 +**배경**: Anthropic API는 브라우저에서 직접 호출할 수 없다 (`A
+          +ccess-Control-Allow-Origin` 헤더가 없음). YouTube Data API는  
+          +브라우저에서 호출 가능하지만, API 키가 네트워크 탭에 노출된다.
+       12 +**이유**: Next.js API Route를 프록시로 활용하면 별도 백엔드 서
+          +버 없이 CORS 문제를 해결할 수 있다. 두 API 호출을 서버 사이드 
+          +에서 처리하여 키 노출 리스크를 줄인다. React 생태계 활용 및 Ve
+          +rcel 배포 편의성도 장점.                                      
+       13 +**대안 검토**:                                                
+       14 +- Vite + React: CORS 해결 불가. 별도 프록시 서버가 필요해짐.  
+       15 +- HTML + Vanilla JS: 같은 CORS 문제. 추가로 컴포넌트 재사용,  
+          +상태 관리가 번거로움.                                         
+       16 +**트레이드오프**: 서버 기능을 API Route 2개만 사용하므로 Vite 
+          +대비 번들 크기가 약간 크다. Next.js의 SSR, ISR, 미들웨어 등 대
+          +부분의 기능을 사용하지 않는다.                                
+       17 +                                                              
+       18 +---                                                           
+       19 +                                                              
+       20 +### ADR-002: Claude Sonnet 모델 사용                          
+       21 +**상태**: 확정                                                
+       22 +**결정**: 센티먼트 분석에 `claude-sonnet-4-20250514` 모델을 사
+          +용한다.                                                       
+       23 +**배경**: 댓글 분석은 분류(긍정/중립/부정) + 요약(강점/개선점)
+          + + 선택(대표 댓글) 태스크다. 고도의 추론이 필요하지 않다.     
+       24 +**이유**: Sonnet은 이 수준의 작업에 충분한 성능을 제공하면서 O
+          +pus 대비 비용이 낮다. 100개 댓글(~10K-30K 토큰 입력)에 대한 응
+          +답이 빠르다.                                                  
+       25 +**대안 검토**:                                                
+       26 +- Claude Opus: 더 높은 분석 품질이 가능하나, 비용이 높고 응답 
+          +이 느리다. 댓글 분석에는 과도.                                
+       27 +- Claude Haiku: 더 빠르고 저렴하나, 구조화된 JSON 출력의 신뢰 
+          +성이 Sonnet보다 낮을 수 있다.                                 
+       28 +- 외부 센티먼트 API (Google NLP 등): 긍정/부정 분류만 가능하고
+          +, "강점/개선점 정리"나 "댓글 언어 대응" 같은 유연한 분석이 불 
+          +가능.                                                         
+       29 +**트레이드오프**: Opus 대비 미묘한 맥락(비꼬기, 이중 의미 등) 
+          +해석이 약할 수 있으나, MVP에서 수용 가능. 모델 변경은 `constan
+          +ts.ts`의 상수 하나만 바꾸면 되므로 전환 비용이 낮다.          
+       30 +                                                              
+       31 +---                                                           
+       32 +                                                              
+       33 +### ADR-003: 사용자 API 키 직접 입력 방식                     
+       34 +**상태**: 확정                                                
+       35 +**결정**: YouTube API 키와 Anthropic API 키를 사용자가 UI에서 
+          +직접 입력하고, `localStorage`에 저장한다. 서버에는 키를 저장하
+          +지 않는다.                                                    
+       36 +**배경**: 서버 없이 동작해야 한다는 요구사항. API 키를 서버에 
+          +두려면 인증 시스템, DB, 환경 변수 관리가 필요하다.            
+       37 +**이유**: 별도 인증/DB가 불필요하다. 사용자가 자신의 API 할당 
+          +량을 사용하므로 운영 비용이 0이다. 개인 도구 용도에 적합하다. 
+          +키는 per-request로 API Route에 전달되고 서버 메모리에 남지 않 
+          +는다.                                                         
+       38 +**대안 검토**:                                                
+       39 +- `.env` 방식: 로컬에서만 사용 가능. 배포 시 키가 서버에 하드 
+          +코딩되어 누구나 사용 가능해짐. 다수 사용자 지원 불가.         
+       40 +- OAuth 기반: 사용자 편의성은 높으나 Google OAuth 설정, 토큰  
+          +관리, 서버 필요. MVP 범위 초과.                               
+       41 +**트레이드오프**: 사용자가 직접 API 키를 발급받아야 하는 진입 
+          +장벽이 있다. `localStorage`는 같은 도메인의 JS에서 접근 가능하
+          +므로 XSS에 취약하지만, 개인 도구이고 외부 스크립트를 로드하지 
+          +않으므로 수용 가능.                                           
+       42 +**보안 고려사항**:                                            
+       43 +- API 키는 password 타입 입력 필드로 마스킹                   
+       44 +- API Route에서 키를 로깅하지 않는다                          
+       45 +- 키는 HTTPS 위에서만 전송된다 (개발 환경 제외)               
+       46 +                                                              
+       47 +---                                                           
+       48 +                                                              
+       49 +### ADR-004: 외부 런타임 의존성 제로                          
+       50 +**상태**: 확정                                                
+       51 +**결정**: Next.js + React 외에 런타임 의존성을 추가하지 않는다
+          +. Anthropic SDK, 차트 라이브러리, 상태 관리 라이브러리를 사용 
+          +하지 않는다.                                                  
+       52 +**배경**: 의존성은 번들 크기, 보안 취약점, 버전 호환성 문제를 
+          +가져온다. 이 앱의 기능은 모두 기본 Web API로 구현 가능하다.   
+       53 +**이유**:                                                     
+       54 +- Anthropic API 호출: `fetch` + 헤더 3개 + JSON body. SDK의 자
+          +동 재시도, 스트리밍, 타입 생성 등은 MVP에서 불필요.           
+       55 +- 센티먼트 차트: CSS flex + percentage width로 구현. chart.js 
+          +나 recharts를 추가할 이유 없음.                               
+       56 +- 상태 관리: `useState` 6개로 충분. zustand나 jotai를 추가할  
+          +이유 없음.                                                    
+       57 +**대안 검토**:                                                
+       58 +- `@anthropic-ai/sdk`: 타입 안전성과 자동 재시도 제공. 하지만 
+          +API 호출 1개에 SDK 전체를 번들에 포함하는 것은 과도.          
+       59 +- `recharts`: 센티먼트 바 차트 하나를 위해 ~150KB 추가는 비합 
+          +리적.                                                         
+       60 +**트레이드오프**: SDK의 타입 안전성, 자동 재시도, 에러 핸들링 
+          +유틸리티를 포기한다. 수동으로 타입을 정의하고 에러를 분류해야 
+          +한다.                                                         
+       61 +                                                              
+       62 +---                                                           
+       63 +                                                              
+       64 +### ADR-005: 댓글 100개 제한 + 관련도순 정렬                  
+       65 +**상태**: 확정                                                
+       66 +**결정**: 댓글을 최대 100개까지, `order=relevance` 순으로 수집
+          +한다. 페이지네이션으로 추가 수집하지 않는다.                  
+       67 +**배경**: YouTube API `commentThreads.list`의 `maxResults` 최 
+          +대값은 100이다. 100개 이상을 수집하려면 `nextPageToken`으로 반
+          +복 호출해야 한다.                                             
+       68 +**이유**:                                                     
+       69 +- 100개는 영상의 전반적인 분위기를 파악하기에 충분한 표본이다.
+       70 +- 관련도순은 좋아요가 많고 답글이 많은 "의미 있는" 댓글을 우선
+          + 가져온다. 최신순보다 대표성이 높다.                          
+       71 +- 100개 댓글은 약 10K-30K 토큰으로, Claude Sonnet의 입력 한도(
+          +200K) 내에서 여유 있고 비용도 적다.                           
+       72 +- API 호출 1회로 끝나므로 YouTube API 할당량 소비가 최소(1 유 
+          +닛).                                                          
+       73 +**대안 검토**:                                                
+       74 +- 500개 수집 (5회 호출): 더 정확한 분석 가능하나, YouTube API 
+          +할당량 5배 소비 + Claude 비용 증가 + 응답 시간 증가.          
+       75 +- 50개 제한: 비용 절약되지만 표본이 적어 분석 신뢰도 감소.    
+       76 +- `order=time` (최신순): 최근 반응을 볼 수 있으나, 스팸이나 단
+          +순 댓글이 포함될 확률이 높다.                                 
+       77 +**트레이드오프**: 댓글이 1,000개 이상인 영상에서 100개만 분석 
+          +하면 전체를 대표하지 못할 수 있다. 하지만 관련도순이므로 가장 
+          +영향력 있는 댓글은 포함된다.                                  
+       78 +                                                              
+       79 +---                                                           
+       80 +                                                              
+       81 +### ADR-006: 다크모드 고정 + 단일 페이지 설계                 
+       82 +**상태**: 확정                                                
+       83 +**결정**: 다크모드만 지원하고 라이트모드 토글은 제공하지 않는 
+          +다. 앱 전체를 단일 페이지에서 상태 전환으로 구현한다.         
+       84 +**배경**: 이 앱은 개인 분석 도구이다. 다수 사용자의 접근성보다
+          + 개발 속도와 일관된 디자인을 우선한다.                        
+       85 +**이유**:                                                     
+       86 +- 다크모드 고정: 테마 전환 로직(CSS 변수, 시스템 설정 감지, 토
+          +글 UI) 불필요. 디자인 작업량 절반.                            
+       87 +- 단일 페이지: URL 입력 → 로딩 → 리포트가 하나의 흐름이므로 라
+          +우팅 불필요. `useState`로 phase를 관리하는 것이 가장 단순.    
+       88 +**트레이드오프**: 라이트모드 선호 사용자에게 불편할 수 있다.  
+          +리포트 URL 공유(딥 링크)가 불가능하다. 하지만 MVP에서 히스토리
+          + 기능이 없으므로 딥 링크의 의미가 없다.                       
+       89 +                                                              
+       90 +---                                                           
+       91 +                                                              
+       92 +### ADR-007: Claude 프롬프트에서 구조화된 JSON 직접 출력      
+       93 +**상태**: 확정                                                
+       94 +**결정**: Claude에게 JSON 스키마를 명시하고 "Return ONLY the J
+          +SON object, nothing else"를 지시하여 응답 전체를 JSON으로 받는
+          +다. `tool_use`(function calling)를 사용하지 않는다.           
+       95 +**배경**: Claude의 응답을 구조화된 데이터로 받는 방법은 두 가 
+          +지: (1) 프롬프트에서 JSON 출력 지시, (2) `tool_use` 기능으로  
+          +스키마 강제.                                                  
+       96 +**이유**:                                                     
+       97 +- 프롬프트 방식이 구현이 단순하다. API 요청 body에 `tools` 배 
+          +열을 추가하지 않아도 된다.                                    
+       98 +- Sonnet은 명확한 JSON 스키마 지시를 따르는 데 충분히 신뢰성이
+          + 있다.                                                        
+       99 +- 응답 파싱이 `JSON.parse` 한 줄로 끝난다.                    
+      100 +**방어 코드**:                                                
+      101 +- Claude가 ` ```json ``` `으로 감쌀 경우를 대비하여 코드 펜스 
+          +를 제거하는 전처리 추가.                                      
+      102 +- 응답에서 첫 `{`부터 마지막 `}`까지 추출하는 fallback 로직.  
+      103 +- `sentiment` 합계가 100이 아닌 경우 클라이언트에서 정규화.   
+      104 +**대안 검토**:                                                
+      105 +- `tool_use`: 스키마 준수가 보장되지만 API 요청이 복잡해지고, 
+          +tool_use 응답 파싱 로직이 추가된다. 이 앱의 스키마는 단순하므 
+          +로 과도.                                                      
+      106 +**트레이드오프**: JSON 출력이 깨질 가능성이 낮지만 0은 아니다.
+          + 방어 코드로 대부분의 케이스를 커버하고, 그래도 실패하면 사용 
+          +자에게 재시도를 안내한다.                                     
+      107 +                                                              
+      108 +---                                                           
+      109 +                                                              
+      110 +### ADR-008: API 키를 쿼리 파라미터로 전달 (YouTube Route)    
+      111 +**상태**: 확정 (개선 가능)                                    
+      112 +**결정**: YouTube API Route에서 API 키를 query parameter(`?api
+          +Key=...`)로 받는다. Anthropic API Route에서는 request body로  
+          +받는다.                                                       
+      113 +**배경**: GET 요청에서 API 키를 전달하는 방법은 query paramete
+          +r 또는 custom header이다.                                     
+      114 +**이유**: 구현이 가장 단순하다. `URLSearchParams`로 바로 접근 
+          +가능. 서비스 레이어에서 URL을 구성하기 쉽다.                  
+      115 +**보안 고려사항**:                                            
+      116 +- query parameter는 서버 액세스 로그에 기록될 수 있다. 하지만 
+          +Next.js 개발 서버와 Vercel은 기본적으로 query parameter를 로깅
+          +하지 않는다.                                                  
+      117 +- HTTPS 위에서 전송되므로 네트워크 상에서는 암호화된다.       
+      118 +- 프로덕션 배포 시 보안을 강화하려면 custom header(`x-youtube-
+          +api-key`)로 전환할 수 있다. 코드 변경량은 적다.               
+      119 +**트레이드오프**: 서버 로그에 키가 남을 가능성. 개인 도구이므 
+          +로 수용 가능.                                                 
+
+● 보강 완료했습니다. 주요 추가 내용 요약:
+
+  PRD.md
+
+  - 사용자 시나리오 10개 추가 (정상 흐름 2개 + 에러 시나리오 8개)
+  - 기능별 수용 기준 명시
+  - 에러 메시지 매핑 테이블 — 13개 에러 원인별 HTTP 상태 + 사용자 메시지
+  - 사전 준비 — YouTube/Anthropic API 키 발급 방법
+  - 제약사항 — 댓글 100개 한도, 토큰 크기, 할당량, localStorage 용량
+  - MVP 제외 사항 확장 — 대댓글, 페이지네이션, 내보내기, 스트리밍 명시
+
+  ARCHITECTURE.md
+
+  - 타입 정의 전체 명시 (Comment, AnalysisReport, AppPhase 등)
+  - API 명세 — 두 엔드포인트의 request/response 스키마, 에러 응답 테이블
+  - Claude 프롬프트 전문 + 설계 의도 해설
+  - 레이어별 에러 처리 전략 — 클라이언트 검증, YouTube Route, Claude Route,
+  클라이언트 수신 각각 분리
+  - 에러 메시지 매핑 코드 (ERROR_MESSAGES Record)
+  - 상태 전이 다이어그램 + 유효한 전이만 정의
+  - 엣지 케이스 12개 — 이모지 댓글, JSON 파싱 실패, Shorts URL, 시크릿 모드 등
+  - 컴포넌트 Props 인터페이스
+  - 유틸리티 함수 명세 — extractVideoId 지원 패턴, storage 키 이름
+
+  ADR.md
+
+  - 기존 4개 → 8개 ADR로 확장
+  - 모든 ADR에 배경, 대안 검토, 보안 고려사항 추가
+  - ADR-005: 댓글 100개 제한 + 관련도순 정렬 근거
+  - ADR-006: 다크모드 고정 + 단일 페이지 설계 근거
+  - ADR-007: Claude JSON 직접 출력 vs tool_use 비교 + 방어 코드 전략
+  - ADR-008: API 키 전달 방식 (query param vs header) + 보안 분석
+
+● Ran 1 stop hook (ctrl+o to expand)
+  ⎿  Stop hook error: Failed with non-blocking status code: No stderr
+  output
+
+✻ Brewed for 5m 11s
