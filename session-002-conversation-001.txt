@@ -1,0 +1,760 @@
+
+ ▐▛███▜▌   Claude Code v2.1.50
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    C:\prj\harness_framework
+
+❯ 이 프로젝트 하네스 세팅이 잘 안 되어 있을 거거든? 너가 보고 세팅 개선해야 
+   될 점들과 부족한 점들을 다 파악해서, 고칠 플랜을 만들어.                 
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● 프로젝트의 하네스 프레임워크 세팅 상태를 전체적으로 파악하겠습니다.
+
+● 2 Explore agents finished (ctrl+o to expand)
+   ├─ Explore harness framework setup · 41 tool uses · 75.2k tokens
+   │  ⎿  Done
+   └─ Explore project source and config · 22 tool uses · 57.2k tokens
+      ⎿  Done
+
+● 탐색 결과를 확인했습니다. 핵심 파일들을 직접 확인하겠습니다.
+
+● Read 4 files (ctrl+o to expand)
+
+● 이제 전체적인 상황이 파악되었습니다. Plan 에이전트를 통해 개선 플랜을
+  설계하겠습니다.
+
+● Plan(Design harness improvement plan)
+  ⎿  Done (8 tool uses · 68.5k tokens · 1m 40s)
+  (ctrl+o to expand)
+
+● 분석이 완료되었습니다. 플랜 파일을 작성하겠습니다.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~\.claude\plans\temporal-mapping-cookie.md · /plan to 
+     edit
+     Harness 프레임워크 세팅 개선 플랜
+
+     Context
+
+     현재 하네스 프레임워크는 executor(execute.py)와 워크플로우
+     문서(harness.md)는 잘 갖춰져 있으나, 실제 사용 시 여러 문제가
+     발생한다. Stop hook이 매 세션마다 실패하고, Windows 환경에서 인코딩
+     크래시가 나며, executor와 Claude 세션이 이중 커밋을 만들고, 위험 명령
+     차단이 불완전하다. 이 플랜은 실제로 하네스를 돌렸을 때 깨지는 것들을
+     우선 수정한다.
+
+     ---
+     변경 1: Stop hook 조건부 실행으로 수정
+
+     문제: settings.json의 Stop hook이 npm run lint && npm run build && npm
+      run test를 실행하지만 package.json이 없어서 매 세션 종료 시 반드시
+     실패한다.
+
+     파일: .claude/settings.json
+
+     변경: package.json 존재 여부를 체크한 뒤 실행하도록 수정
+     "command": "if [ -f package.json ]; then npm run lint 2>&1 && npm run
+     build 2>&1 && npm run test 2>&1; else echo 'package.json 없음 — skip';
+      fi"
+
+     ---
+     변경 2: execute.py Windows 인코딩 크래시 수정
+
+     문제: _load_guardrails()에서 read_text()를 encoding 없이 호출. Windows
+      기본 인코딩(cp949)으로 한글 문서를 읽다 UnicodeDecodeError 발생.
+
+     파일: scripts/execute.py
+
+     변경: _load_guardrails() (177-186행)에서 read_text(encoding="utf-8")
+     명시
+     sections.append(f"## 프로젝트 규칙 
+     (CLAUDE.md)\n\n{claude_md.read_text(encoding='utf-8')}")
+     # ...
+     sections.append(f"## {doc.stem}\n\n{doc.read_text(encoding='utf-8')}")
+
+     _invoke_claude()의 step_file.read_text() (237행)도 동일하게 수정.
+
+     테스트: test_execute.py의 관련 테스트가 이미 tempfile을 쓰므로 추가
+     수정 불필요.
+
+     ---
+     변경 3: 이중 커밋 문제 해결 — preamble에서 커밋 지시 제거
+
+     문제: _build_preamble() 규칙 6이 Claude에게 "모든 변경사항을
+     커밋하라"고 지시하는데, _commit_step()이 이미 자동으로 커밋한다.
+     결과적으로 Claude가 커밋 → executor가 또 커밋하여 이중/빈 커밋 발생.
+
+     파일: scripts/execute.py (199-225행)
+
+     변경: 규칙 6의 커밋 지시를 "커밋하지 마라. executor가 자동 커밋한다"로
+      변경
+     f"6. 변경사항을 직접 커밋하지 마라. executor가 자동으로 
+     커밋한다.\n\n---\n\n"
+
+     테스트: test_execute.py의 TestBuildPreamble에서 preamble 내용 검증
+     업데이트 필요.
+
+     ---
+     변경 4: PreToolUse 위험 명령 패턴 보강
+
+     문제: 현재 패턴이 rm -rf, git push --force, git reset --hard, DROP 
+     TABLE 4가지만 차단. git checkout ., git clean -fd, git stash drop 등
+     파괴적 명령이 빠져 있다.
+
+     파일: .claude/settings.json
+
+     변경: grep 패턴을 확장
+     grep -qE 'rm\s+-rf|git\s+push\s+--force|git\s+reset\s+--hard|git\s+che
+     ckout\s+\.|git\s+clean\s+-[fd]|git\s+stash\s+drop|DROP\s+TABLE'
+
+     ---
+     변경 5: .gitignore에 시크릿 파일 패턴 추가
+
+     문제: .gitignore에 .env 관련 패턴이 없음. _commit_step()이 git add 
+     -A를 사용하므로 실수로 API 키가 커밋될 수 있다.
+
+     파일: .gitignore
+
+     변경: 아래 패턴 추가
+     .env
+     .env.*
+     .env.local
+     *.key
+     *.pem
+
+     ---
+     변경 6: harness.md의 python3 → python 수정
+
+     문제: Windows에서 python3은 존재하지 않음. python으로 통일해야 한다.
+
+     파일: .claude/commands/harness.md (134-137행), scripts/execute.py
+     docstring (6행)
+
+     변경: python3 → python으로 교체
+
+     ---
+     변경 7: Claude 호출 타임아웃을 CLI 인자로 설정 가능하게
+
+     문제: _invoke_claude()의 timeout=1800이 하드코딩. 복잡한 step은
+     30분으로 부족할 수 있고, 단순 step에서 Claude가 멈추면 30분을
+     낭비한다.
+
+     파일: scripts/execute.py
+
+     변경:
+     - __init__에 timeout 파라미터 추가 (기본값 1800)
+     - main()의 argparse에 --timeout 인자 추가
+     - _invoke_claude()에서 self._default_timeout 사용
+     - step별 "timeout" 필드도 지원: step.get("timeout", 
+     self._default_timeout)
+
+     테스트: test_execute.py에 커스텀 타임아웃 테스트 추가.
+
+     ---
+     변경 8: _check_blockers 순회 방향 수정
+
+     문제: reversed(index["steps"])로 뒤에서부터 순회하면서 status != 
+     "pending"이면 break. 만약 뒤쪽 step이 completed인데 앞쪽에 error가
+     있으면 감지를 못 한다.
+
+     파일: scripts/execute.py (270-283행)
+
+     변경: reversed() 제거, 정방향으로 전체 순회
+     def _check_blockers(self):
+         index = self._read_json(self._index_file)
+         for s in index["steps"]:
+             if s["status"] == "error":
+                 # ... exit
+             if s["status"] == "blocked":
+                 # ... exit
+
+     ---
+     수정 대상 파일 요약
+
+     파일: .claude/settings.json
+     변경 내용: Stop hook 조건부 실행, PreToolUse 패턴 보강
+     ────────────────────────────────────────
+     파일: scripts/execute.py
+     변경 내용: 인코딩 수정, 이중커밋 방지, 타임아웃 설정, _check_blockers
+     수정
+     ────────────────────────────────────────
+     파일: scripts/test_execute.py
+     변경 내용: preamble 테스트 업데이트, 타임아웃 테스트 추가
+     ────────────────────────────────────────
+     파일: .claude/commands/harness.md
+     변경 내용: python3 → python
+     ────────────────────────────────────────
+     파일: .gitignore
+     변경 내용: .env, .key, .pem 패턴 추가
+
+     검증
+
+     1. python scripts/test_execute.py — 기존+신규 테스트 통과
+     2. .claude/settings.json이 유효한 JSON인지 확인
+     3. git diff로 변경 범위 확인 — 의도하지 않은 파일 없어야 함
+
+● 플랜이 승인되었습니다. 작업을 시작하겠습니다.
+
+● Update(.claude\settings.json)
+  ⎿  Added 1 line, removed 1 line
+       6          "hooks": [
+       7            {
+       8              "type": "command",
+       9 -            "command": "npm run lint 2>&1 && npm run build 2>&1
+         - && npm run test 2>&1"                                         
+       9 +            "command": "if [ -f package.json ]; then npm run li
+         +nt 2>&1 && npm run build 2>&1 && npm run test 2>&1; else echo '
+         +package.json 없음 — skip'; fi"                                 
+      10            }
+      11          ]
+      12        }
+
+● Update(.claude\settings.json)
+  ⎿  Added 1 line, removed 1 line
+      17          "hooks": [
+      18            {
+      19              "type": "command",
+      20 -            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -
+         -qE 'rm\\s+-rf|git\\s+push\\s+--force|git\\s+reset\\s+--hard|DRO
+         -P\\s+TABLE'; then echo 'BLOCKED: 위험한 명령어가 감지되었습니다
+         -.' >&2; exit 1; fi"                                            
+      20 +            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -
+         +qE 'rm\\s+-rf|git\\s+push\\s+--force|git\\s+reset\\s+--hard|git
+         +\\s+checkout\\s+\\.|git\\s+clean\\s+-[fd]|git\\s+stash\\s+drop|
+         +DROP\\s+TABLE'; then echo 'BLOCKED: 위험한 명령어가 감지되었습 
+         +니다.' >&2; exit 1; fi"                                        
+      21            }
+      22          ]
+      23        }
+
+● 이제 execute.py를 수정합니다. 4가지 변경: 인코딩, 이중커밋, 타임아웃,
+  _check_blockers.
+
+● Update(scripts\execute.py)
+  ⎿  Added 1 line, removed 1 line
+      3  Harness Step Executor — phase 내 step을 순차 실행하고 자가 교정
+         한다.
+      4  
+      5  Usage:
+      6 -    python3 scripts/execute.py <phase-dir> [--push]             
+      6 +    python scripts/execute.py <phase-dir> [--push] [--timeout SE
+        +CONDS]                                                          
+      7  """
+      8  
+      9  import argparse
+
+● Update(scripts\execute.py)
+  ⎿  Added 1 line, removed 1 line
+      58      CHORE_MSG = "chore({phase}): step {num} output"
+      59      TZ = timezone(timedelta(hours=9))
+      60  
+      61 -    def __init__(self, phase_dir_name: str, *, auto_push: bool 
+         -= False):                                                      
+      61 +    def __init__(self, phase_dir_name: str, *, auto_push: bool 
+         += False, timeout: int = 1800):                                 
+      62          self._root = str(ROOT)
+      63          self._phases_dir = ROOT / "phases"
+      64          self._phase_dir = self._phases_dir / phase_dir_name
+
+● Update(scripts\execute.py)
+  ⎿  Added 1 line
+      65          self._phase_dir_name = phase_dir_name
+      66          self._top_index_file = self._phases_dir / "index.json"
+      67          self._auto_push = auto_push
+      68 +        self._default_timeout = timeout                        
+      69  
+      70          if not self._phase_dir.is_dir():
+      71              print(f"ERROR: {self._phase_dir} not found")
+
+● 인코딩 수정:
+
+● Update(scripts\execute.py)
+  ⎿  Added 2 lines, removed 2 lines
+      179          sections = []
+      180          claude_md = ROOT / "CLAUDE.md"
+      181          if claude_md.exists():
+      182 -            sections.append(f"## 프로젝트 규칙 (CLAUDE.md)\n\n
+          -{claude_md.read_text()}")                                     
+      182 +            sections.append(f"## 프로젝트 규칙 (CLAUDE.md)\n\n
+          +{claude_md.read_text(encoding='utf-8')}")                     
+      183          docs_dir = ROOT / "docs"
+      184          if docs_dir.is_dir():
+      185              for doc in sorted(docs_dir.glob("*.md")):
+      186 -                sections.append(f"## {doc.stem}\n\n{doc.read_t
+          -ext()}")                                                      
+      186 +                sections.append(f"## {doc.stem}\n\n{doc.read_t
+          +ext(encoding='utf-8')}")                                      
+      187          return "\n\n---\n\n".join(sections) if sections else "
+           "
+      188  
+      189      @staticmethod
+
+● step file read_text 인코딩 수정:
+
+● Update(scripts\execute.py)
+  ⎿  Added 3 lines, removed 2 lines
+      235              print(f"  ERROR: {step_file} not found")
+      236              sys.exit(1)
+      237  
+      238 -        prompt = preamble + step_file.read_text()             
+      238 +        prompt = preamble + step_file.read_text(encoding="utf-
+          +8")                                                           
+      239 +        timeout = step.get("timeout", self._default_timeout)  
+      240          result = subprocess.run(
+      241              ["claude", "-p", "--dangerously-skip-permissions",
+            "--output-format", "json", prompt],
+      241 -            cwd=self._root, capture_output=True, text=True, ti
+          -meout=1800,                                                   
+      242 +            cwd=self._root, capture_output=True, text=True, ti
+          +meout=timeout,                                                
+      243          )
+      244  
+      245          if result.returncode != 0:
+
+● 이중 커밋 방지 — preamble 규칙 6 수정:
+
+● Update(scripts\execute.py)
+  ⎿  Added 1 line, removed 2 lines
+      221              f"   - AC 통과 → \"completed\" + \"summary\" 필드
+           에 이 step의 산출물을 한 줄로 요약\n"
+      222              f"   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 
+           → \"error\" + \"error_message\" 기록\n"
+      223              f"   - 사용자 개입이 필요한 경우 (API 키, 인증, 수
+           동 설정 등) → \"blocked\" + \"blocked_reason\" 기록 후 즉시 중
+           단\n"
+      224 -            f"6. 모든 변경사항을 커밋하라:\n"                 
+      225 -            f"   {commit_example}\n\n---\n\n"                 
+      224 +            f"6. 변경사항을 직접 커밋하지 마라. executor가 자 
+          +동으로 커밋한다.\n\n---\n\n"                                  
+      225          )
+      226  
+      227      # --- Claude 호출 ---
+
+● _check_blockers 순회 방향 수정:
+
+● Update(scripts\execute.py)
+  ⎿  Added 1 line, removed 3 lines
+      269  
+      270      def _check_blockers(self):
+      271          index = self._read_json(self._index_file)
+      272 -        for s in reversed(index["steps"]):                    
+      272 +        for s in index["steps"]:                              
+      273              if s["status"] == "error":
+      274                  print(f"\n  ✗ Step {s['step']} ({s['name']}) f
+           ailed.")
+      275                  print(f"  Error: {s.get('error_message', 'unkn
+           own')}")
+     ...
+      280                  print(f"  Reason: {s.get('blocked_reason', 'un
+           known')}")
+      281                  print(f"  Resolve and reset status to 'pending
+           ' to retry.")
+      282                  sys.exit(2)
+      283 -            if s["status"] != "pending":                      
+      284 -                break                                         
+      283  
+      284      def _ensure_created_at(self):
+      285          index = self._read_json(self._index_file)
+
+● main() argparse에 --timeout 추가:
+
+● Update(scripts\execute.py)
+  ⎿  Added 2 lines, removed 1 line
+      407      parser = argparse.ArgumentParser(description="Harness Step
+            Executor")
+      408      parser.add_argument("phase_dir", help="Phase directory nam
+           e (e.g. 0-mvp)")
+      409      parser.add_argument("--push", action="store_true", help="P
+           ush branch after completion")
+      410 +    parser.add_argument("--timeout", type=int, default=1800, h
+          +elp="Timeout per step in seconds (default: 1800)")            
+      411      args = parser.parse_args()
+      412  
+      412 -    StepExecutor(args.phase_dir, auto_push=args.push).run()   
+      413 +    StepExecutor(args.phase_dir, auto_push=args.push, timeout=
+          +args.timeout).run()                                           
+      414  
+      415  
+      416  if __name__ == "__main__":
+
+● preamble에서 사용하지 않게 된 commit_example 변수 정리:
+
+● Update(scripts\execute.py)
+  ⎿  Removed 3 lines
+      199  
+      200      def _build_preamble(self, guardrails: str, step_context: s
+           tr,
+      201                          prev_error: Optional[str] = None) -> s
+           tr:
+      202 -        commit_example = self.FEAT_MSG.format(                
+      203 -            phase=self._phase_name, num="N", name="<step-name>
+          -"                                                             
+      204 -        )                                                     
+      202          retry_section = ""
+      203          if prev_error:
+      204              retry_section = (
+
+● 테스트 파일을 읽어서 수정이 필요한 부분을 확인합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● 테스트 파일을 수정합니다. test_includes_commit_example을 새 동작에 맞게
+  변경하고, 타임아웃 테스트를 추가합니다.
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 3 lines, removed 2 lines
+      245          result = executor._build_preamble("", ctx)
+      246          assert "이전 Step 산출물" in result
+      247  
+      248 -    def test_includes_commit_example(self, executor):         
+      248 +    def test_no_manual_commit_instruction(self, executor):    
+      249          result = executor._build_preamble("", "")
+      250 -        assert "feat(mvp):" in result                         
+      250 +        assert "직접 커밋하지 마라" in result                 
+      251 +        assert "executor가 자동으로 커밋" in result           
+      252  
+      253      def test_includes_rules(self, executor):
+      254          result = executor._build_preamble("", "")
+
+● 타임아웃 테스트 추가:
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 20 lines, removed 1 line
+      461              executor._invoke_claude(step, "preamble")
+      462          assert exc_info.value.code == 1
+      463  
+      464 -    def test_timeout_is_1800(self, executor):                 
+      464 +    def test_timeout_default_is_1800(self, executor):         
+      465          mock_result = MagicMock(returncode=0, stdout="{}", std
+           err="")
+      466          step = {"step": 2, "name": "ui"}
+      467  
+     ...
+      470  
+      471          assert mock_run.call_args[1]["timeout"] == 1800
+      472  
+      473 +    def test_timeout_custom_via_constructor(self, executor):  
+      474 +        executor._default_timeout = 3600                      
+      475 +        mock_result = MagicMock(returncode=0, stdout="{}", std
+          +err="")                                                       
+      476 +        step = {"step": 2, "name": "ui"}                      
+      477  
+      478 +        with patch("subprocess.run", return_value=mock_result)
+          + as mock_run:                                                 
+      479 +            executor._invoke_claude(step, "preamble")         
+      480 +                                                              
+      481 +        assert mock_run.call_args[1]["timeout"] == 3600       
+      482 +                                                              
+      483 +    def test_timeout_per_step_override(self, executor):       
+      484 +        mock_result = MagicMock(returncode=0, stdout="{}", std
+          +err="")                                                       
+      485 +        step = {"step": 2, "name": "ui", "timeout": 600}      
+      486 +                                                              
+      487 +        with patch("subprocess.run", return_value=mock_result)
+          + as mock_run:                                                 
+      488 +            executor._invoke_claude(step, "preamble")         
+      489 +                                                              
+      490 +        assert mock_run.call_args[1]["timeout"] == 600        
+      491 +                                                              
+      492 +                                                              
+      493  # ------------------------------------------------------------
+           ---------------
+      494  # progress_indicator (= 이전 Spinner)
+      495  # ------------------------------------------------------------
+           ---------------
+
+● _check_blockers 정방향 순회 테스트 추가:
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 19 lines
+      577          with pytest.raises(SystemExit) as exc_info:
+      578              inst._check_blockers()
+      579          assert exc_info.value.code == 2
+      580 +                                                              
+      581 +    def test_error_before_completed_detected(self, tmp_project
+          +):                                                            
+      582 +        """정방향 순회로 앞쪽 error가 뒤쪽 completed에 가려지 
+          +지 않는지 검증."""                                            
+      583 +        steps = [                                             
+      584 +            {"step": 0, "name": "bad", "status": "error", "err
+          +or_message": "fail"},                                         
+      585 +            {"step": 1, "name": "ok", "status": "completed"}, 
+      586 +        ]                                                     
+      587 +        inst = self._make_executor_with_steps(tmp_project, ste
+          +ps)                                                           
+      588 +        with pytest.raises(SystemExit) as exc_info:           
+      589 +            inst._check_blockers()                            
+      590 +        assert exc_info.value.code == 1                       
+      591 +                                                              
+      592 +    def test_all_pending_passes(self, tmp_project):           
+      593 +        steps = [                                             
+      594 +            {"step": 0, "name": "a", "status": "pending"},    
+      595 +            {"step": 1, "name": "b", "status": "pending"},    
+      596 +        ]                                                     
+      597 +        inst = self._make_executor_with_steps(tmp_project, ste
+          +ps)                                                           
+      598 +        inst._check_blockers()  # should not raise            
+
+● harness.md와 .gitignore를 수정합니다.
+
+● Update(.claude\commands\harness.md)
+  ⎿  Added 2 lines, removed 2 lines
+      132  ### E. 실행
+      133  
+      134  ```bash
+      135 -python3 scripts/execute.py {task-name}        # 순차 실행     
+      136 -python3 scripts/execute.py {task-name} --push  # 실행 후 push 
+      135 +python scripts/execute.py {task-name}        # 순차 실행      
+      136 +python scripts/execute.py {task-name} --push  # 실행 후 push  
+      137  ```
+      138  
+      139  execute.py가 자동으로 처리하는 것:
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(.gitignore)
+  ⎿  Added 7 lines
+       7  # phase execution outputs
+       8  phases/**/phase*-output.json
+       9  phases/**/step*-output.json
+      10 +                                                               
+      11 +# secrets                                                      
+      12 +.env                                                           
+      13 +.env.*                                                         
+      14 +.env.local                                                     
+      15 +*.key                                                          
+      16 +*.pem                                                          
+
+● 테스트를 실행합니다.
+
+● Bash(cd /c/prj/harness_framework && python -m pytest scripts/test_execute.py
+      -v 2>&1)
+  ⎿  Error: Exit code 1
+     C:\Users\daron\AppData\Local\Programs\Python\Python312\python.exe: No 
+     module named pytest
+
+     C:\Users\daron\AppData\Local\Programs\Python\Python312\python.exe: No 
+     module named pytest
+
+● Bash(pip install pytest 2>&1 && cd /c/prj/harness_framework && python -m
+      pytest scripts/test_execute.py -v 2>&1)
+  ⎿  Error: Exit code 1
+     Collecting pytest
+       Downloading pytest-9.0.3-py3-none-any.whl.metadata (7.6 kB)
+     Requirement already satisfied: colorama>=0.4 in 
+     C:\Users\daron\AppData\Local\Programs\Python\Python312\Lib\site-packages 
+     (from pytest) (0.4.6)
+     Collecting iniconfig>=1.0.1 (from pytest)
+       Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+     Requirement already satisfied: packaging>=22 in 
+     C:\Users\daron\AppData\Local\Programs\Python\Python312\Lib\site-packages 
+     (from pytest) (26.0)
+     Collecting pluggy<2,>=1.5 (from pytest)
+       Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+     Collecting pygments>=2.7.2 (from pytest)
+
+     … +162 lines (ctrl+o to see all)
+
+● 테스트 fixture들이 write_text()를 encoding 없이 호출해서 cp949로 쓰는데,
+  _read_json이 utf-8로 읽으니 충돌합니다. fixture들을 수정합니다.
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 3 lines, removed 3 lines
+      29      phases_dir.mkdir()
+      30  
+      31      claude_md = tmp_path / "CLAUDE.md"
+      32 -    claude_md.write_text("# Rules\n- rule one\n- rule two")    
+      32 +    claude_md.write_text("# Rules\n- rule one\n- rule two", enc
+         +oding="utf-8")                                                 
+      33  
+      34      docs_dir = tmp_path / "docs"
+      35      docs_dir.mkdir()
+      36 -    (docs_dir / "arch.md").write_text("# Architecture\nSome con
+         -tent")                                                         
+      37 -    (docs_dir / "guide.md").write_text("# Guide\nAnother doc") 
+      36 +    (docs_dir / "arch.md").write_text("# Architecture\nSome con
+         +tent", encoding="utf-8")                                       
+      37 +    (docs_dir / "guide.md").write_text("# Guide\nAnother doc", 
+         +encoding="utf-8")                                              
+      38  
+      39      return tmp_path
+      40  
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 2 lines, removed 2 lines
+      54              {"step": 2, "name": "ui", "status": "pending"},
+      55          ],
+      56      }
+      57 -    (d / "index.json").write_text(json.dumps(index, indent=2, e
+         -nsure_ascii=False))                                            
+      58 -    (d / "step2.md").write_text("# Step 2: UI\n\nUI를 구현하세 
+         -요.")                                                          
+      57 +    (d / "index.json").write_text(json.dumps(index, indent=2, e
+         +nsure_ascii=False), encoding="utf-8")                          
+      58 +    (d / "step2.md").write_text("# Step 2: UI\n\nUI를 구현하세 
+         +요.", encoding="utf-8")                                        
+      59  
+      60      return d
+      61  
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 1 line, removed 1 line
+      70          ]
+      71      }
+      72      p = tmp_project / "phases" / "index.json"
+      73 -    p.write_text(json.dumps(top, indent=2))                    
+      73 +    p.write_text(json.dumps(top, indent=2), encoding="utf-8")  
+      74      return p
+      75  
+      76  
+
+● test_save_ensures_ascii_false 테스트와 test_empty_project,
+  _make_executor_with_steps도 수정:
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 1 line, removed 1 line
+      126      def test_save_ensures_ascii_false(self, tmp_path):
+      127          p = tmp_path / "test.json"
+      128          ex.StepExecutor._write_json(p, {"한글": "테스트"})
+      129 -        raw = p.read_text()                                   
+      129 +        raw = p.read_text(encoding="utf-8")                   
+      130          assert "한글" in raw
+      131          assert "\\u" not in raw
+      132  
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 1 line, removed 1 line
+      187              phases_dir = tmp_path / "phases" / "dummy"
+      188              phases_dir.mkdir(parents=True)
+      189              idx = {"project": "T", "phase": "t", "steps": []}
+      190 -            (phases_dir / "index.json").write_text(json.dumps(
+          -idx))                                                         
+      190 +            (phases_dir / "index.json").write_text(json.dumps(
+          +idx), encoding="utf-8")                                       
+      191              inst = ex.StepExecutor.__new__(ex.StepExecutor)
+      192              result = inst._load_guardrails()
+      193          assert result == ""
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 1 line, removed 1 line
+      544          d = tmp_project / "phases" / "test-phase"
+      545          d.mkdir(exist_ok=True)
+      546          index = {"project": "T", "phase": "test", "steps": ste
+           ps}
+      547 -        (d / "index.json").write_text(json.dumps(index))      
+      547 +        (d / "index.json").write_text(json.dumps(index), encod
+          +ing="utf-8")                                                  
+      548  
+      549          with patch.object(ex, "ROOT", tmp_project):
+      550              inst = ex.StepExecutor.__new__(ex.StepExecutor)
+
+● 테스트 재실행:
+
+● Bash(cd /c/prj/harness_framework && python -m pytest scripts/test_execute.py
+      -v 2>&1)
+  ⎿  Error: Exit code 1
+     ============================= test session starts 
+     =============================
+     platform win32 -- Python 3.12.10, pytest-9.0.3, pluggy-1.6.0 -- 
+     C:\Users\daron\AppData\Local\Programs\Python\Python312\python.exe
+     cachedir: .pytest_cache
+     rootdir: C:\prj\harness_framework
+     plugins: anyio-4.12.1, langsmith-0.7.6
+     collecting ... collected 55 items
+
+     scripts/test_execute.py::TestStamp::test_returns_kst_timestamp PASSED    [ 
+      1%]
+     scripts/test_execute.py::TestStamp::test_format_is_iso PASSED            [ 
+      3%]
+
+     … +153 lines (ctrl+o to see all)
+
+● 4개 실패 — TestBuildStepContext 테스트 내부에서도 read_text() 호출에
+  encoding이 빠져있습니다.
+
+● Update(scripts\test_execute.py)
+  ⎿  Added 4 lines, removed 4 lines
+      199  
+      200  class TestBuildStepContext:
+      201      def test_includes_completed_with_summary(self, phase_dir):
+      202 -        index = json.loads((phase_dir / "index.json").read_tex
+          -t())                                                          
+      202 +        index = json.loads((phase_dir / "index.json").read_tex
+          +t(encoding="utf-8"))                                          
+      203          result = ex.StepExecutor._build_step_context(index)
+      204          assert "Step 0 (setup): 프로젝트 초기화 완료" in resul
+           t
+      205          assert "Step 1 (core): 핵심 로직 구현" in result
+      206  
+      207      def test_excludes_pending(self, phase_dir):
+      208 -        index = json.loads((phase_dir / "index.json").read_tex
+          -t())                                                          
+      208 +        index = json.loads((phase_dir / "index.json").read_tex
+          +t(encoding="utf-8"))                                          
+      209          result = ex.StepExecutor._build_step_context(index)
+      210          assert "ui" not in result
+      211  
+      212      def test_excludes_completed_without_summary(self, phase_di
+           r):
+      213 -        index = json.loads((phase_dir / "index.json").read_tex
+          -t())                                                          
+      213 +        index = json.loads((phase_dir / "index.json").read_tex
+          +t(encoding="utf-8"))                                          
+      214          del index["steps"][0]["summary"]
+      215          result = ex.StepExecutor._build_step_context(index)
+      216          assert "setup" not in result
+     ...
+      222          assert result == ""
+      223  
+      224      def test_has_header(self, phase_dir):
+      225 -        index = json.loads((phase_dir / "index.json").read_tex
+          -t())                                                          
+      225 +        index = json.loads((phase_dir / "index.json").read_tex
+          +t(encoding="utf-8"))                                          
+      226          result = ex.StepExecutor._build_step_context(index)
+      227          assert result.startswith("## 이전 Step 산출물")
+      228  
+
+● Bash(cd /c/prj/harness_framework && python -m pytest scripts/test_execute.py
+      -v 2>&1)
+  ⎿  ============================= test session starts ====================
+     =========
+     platform win32 -- Python 3.12.10, pytest-9.0.3, pluggy-1.6.0 -- C:\Use
+     … +71 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● 55개 테스트 전부 통과했습니다.
+
+● 모든 작업이 완료되었습니다. 변경 사항 요약:
+
+  .claude/settings.json
+  - Stop hook: package.json 존재 여부를 체크한 뒤 실행하도록 수정 (매 세션 종료
+  실패 방지)
+  - PreToolUse: git checkout ., git clean -fd, git stash drop 패턴 추가
+
+  scripts/execute.py
+  - _load_guardrails(), _invoke_claude(): read_text(encoding="utf-8") 명시
+  (Windows cp949 크래시 수정)
+  - _build_preamble(): 규칙 6을 "커밋하지 마라, executor가 자동 커밋한다"로 변경
+   (이중 커밋 방지)
+  - _invoke_claude(): step별/CLI --timeout 인자 지원 (하드코딩 제거)
+  - _check_blockers(): reversed() 제거, 정방향 전체 순회 (에러 감지 누락 수정)
+  - docstring: python3 → python (Windows 호환)
+
+  scripts/test_execute.py
+  - 모든 fixture/테스트에 encoding="utf-8" 추가
+  - test_no_manual_commit_instruction: 새 커밋 금지 규칙 검증
+  - test_timeout_custom_via_constructor, test_timeout_per_step_override:
+  타임아웃 설정 테스트
+  - test_error_before_completed_detected, test_all_pending_passes:
+  _check_blockers 정방향 순회 검증
+
+  .claude/commands/harness.md: python3 → python
+
+  .gitignore: .env, .env.*, .env.local, *.key, *.pem 패턴 추가
+
+✻ Cogitated for 8m 43s

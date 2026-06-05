@@ -3,7 +3,7 @@
 Harness Step Executor — phase 내 step을 순차 실행하고 자가 교정한다.
 
 Usage:
-    python3 scripts/execute.py <phase-dir> [--push]
+    python scripts/execute.py <phase-dir> [--push] [--timeout SECONDS]
 """
 
 import argparse
@@ -58,13 +58,14 @@ class StepExecutor:
     CHORE_MSG = "chore({phase}): step {num} output"
     TZ = timezone(timedelta(hours=9))
 
-    def __init__(self, phase_dir_name: str, *, auto_push: bool = False):
+    def __init__(self, phase_dir_name: str, *, auto_push: bool = False, timeout: int = 1800):
         self._root = str(ROOT)
         self._phases_dir = ROOT / "phases"
         self._phase_dir = self._phases_dir / phase_dir_name
         self._phase_dir_name = phase_dir_name
         self._top_index_file = self._phases_dir / "index.json"
         self._auto_push = auto_push
+        self._default_timeout = timeout
 
         if not self._phase_dir.is_dir():
             print(f"ERROR: {self._phase_dir} not found")
@@ -178,11 +179,11 @@ class StepExecutor:
         sections = []
         claude_md = ROOT / "CLAUDE.md"
         if claude_md.exists():
-            sections.append(f"## 프로젝트 규칙 (CLAUDE.md)\n\n{claude_md.read_text()}")
+            sections.append(f"## 프로젝트 규칙 (CLAUDE.md)\n\n{claude_md.read_text(encoding='utf-8')}")
         docs_dir = ROOT / "docs"
         if docs_dir.is_dir():
             for doc in sorted(docs_dir.glob("*.md")):
-                sections.append(f"## {doc.stem}\n\n{doc.read_text()}")
+                sections.append(f"## {doc.stem}\n\n{doc.read_text(encoding='utf-8')}")
         return "\n\n---\n\n".join(sections) if sections else ""
 
     @staticmethod
@@ -198,9 +199,6 @@ class StepExecutor:
 
     def _build_preamble(self, guardrails: str, step_context: str,
                         prev_error: Optional[str] = None) -> str:
-        commit_example = self.FEAT_MSG.format(
-            phase=self._phase_name, num="N", name="<step-name>"
-        )
         retry_section = ""
         if prev_error:
             retry_section = (
@@ -220,8 +218,7 @@ class StepExecutor:
             f"   - AC 통과 → \"completed\" + \"summary\" 필드에 이 step의 산출물을 한 줄로 요약\n"
             f"   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → \"error\" + \"error_message\" 기록\n"
             f"   - 사용자 개입이 필요한 경우 (API 키, 인증, 수동 설정 등) → \"blocked\" + \"blocked_reason\" 기록 후 즉시 중단\n"
-            f"6. 모든 변경사항을 커밋하라:\n"
-            f"   {commit_example}\n\n---\n\n"
+            f"6. 변경사항을 직접 커밋하지 마라. executor가 자동으로 커밋한다.\n\n---\n\n"
         )
 
     # --- Claude 호출 ---
@@ -234,10 +231,11 @@ class StepExecutor:
             print(f"  ERROR: {step_file} not found")
             sys.exit(1)
 
-        prompt = preamble + step_file.read_text()
+        prompt = preamble + step_file.read_text(encoding="utf-8")
+        timeout = step.get("timeout", self._default_timeout)
         result = subprocess.run(
             ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
-            cwd=self._root, capture_output=True, text=True, timeout=1800,
+            cwd=self._root, capture_output=True, text=True, timeout=timeout,
         )
 
         if result.returncode != 0:
@@ -268,7 +266,7 @@ class StepExecutor:
 
     def _check_blockers(self):
         index = self._read_json(self._index_file)
-        for s in reversed(index["steps"]):
+        for s in index["steps"]:
             if s["status"] == "error":
                 print(f"\n  ✗ Step {s['step']} ({s['name']}) failed.")
                 print(f"  Error: {s.get('error_message', 'unknown')}")
@@ -279,8 +277,6 @@ class StepExecutor:
                 print(f"  Reason: {s.get('blocked_reason', 'unknown')}")
                 print(f"  Resolve and reset status to 'pending' to retry.")
                 sys.exit(2)
-            if s["status"] != "pending":
-                break
 
     def _ensure_created_at(self):
         index = self._read_json(self._index_file)
@@ -408,9 +404,10 @@ def main():
     parser = argparse.ArgumentParser(description="Harness Step Executor")
     parser.add_argument("phase_dir", help="Phase directory name (e.g. 0-mvp)")
     parser.add_argument("--push", action="store_true", help="Push branch after completion")
+    parser.add_argument("--timeout", type=int, default=1800, help="Timeout per step in seconds (default: 1800)")
     args = parser.parse_args()
 
-    StepExecutor(args.phase_dir, auto_push=args.push).run()
+    StepExecutor(args.phase_dir, auto_push=args.push, timeout=args.timeout).run()
 
 
 if __name__ == "__main__":

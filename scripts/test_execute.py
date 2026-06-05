@@ -29,12 +29,12 @@ def tmp_project(tmp_path):
     phases_dir.mkdir()
 
     claude_md = tmp_path / "CLAUDE.md"
-    claude_md.write_text("# Rules\n- rule one\n- rule two")
+    claude_md.write_text("# Rules\n- rule one\n- rule two", encoding="utf-8")
 
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "arch.md").write_text("# Architecture\nSome content")
-    (docs_dir / "guide.md").write_text("# Guide\nAnother doc")
+    (docs_dir / "arch.md").write_text("# Architecture\nSome content", encoding="utf-8")
+    (docs_dir / "guide.md").write_text("# Guide\nAnother doc", encoding="utf-8")
 
     return tmp_path
 
@@ -54,8 +54,8 @@ def phase_dir(tmp_project):
             {"step": 2, "name": "ui", "status": "pending"},
         ],
     }
-    (d / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False))
-    (d / "step2.md").write_text("# Step 2: UI\n\nUI를 구현하세요.")
+    (d / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding="utf-8")
+    (d / "step2.md").write_text("# Step 2: UI\n\nUI를 구현하세요.", encoding="utf-8")
 
     return d
 
@@ -70,7 +70,7 @@ def top_index(tmp_project):
         ]
     }
     p = tmp_project / "phases" / "index.json"
-    p.write_text(json.dumps(top, indent=2))
+    p.write_text(json.dumps(top, indent=2), encoding="utf-8")
     return p
 
 
@@ -126,7 +126,7 @@ class TestJsonHelpers:
     def test_save_ensures_ascii_false(self, tmp_path):
         p = tmp_path / "test.json"
         ex.StepExecutor._write_json(p, {"한글": "테스트"})
-        raw = p.read_text()
+        raw = p.read_text(encoding="utf-8")
         assert "한글" in raw
         assert "\\u" not in raw
 
@@ -187,7 +187,7 @@ class TestLoadGuardrails:
             phases_dir = tmp_path / "phases" / "dummy"
             phases_dir.mkdir(parents=True)
             idx = {"project": "T", "phase": "t", "steps": []}
-            (phases_dir / "index.json").write_text(json.dumps(idx))
+            (phases_dir / "index.json").write_text(json.dumps(idx), encoding="utf-8")
             inst = ex.StepExecutor.__new__(ex.StepExecutor)
             result = inst._load_guardrails()
         assert result == ""
@@ -199,18 +199,18 @@ class TestLoadGuardrails:
 
 class TestBuildStepContext:
     def test_includes_completed_with_summary(self, phase_dir):
-        index = json.loads((phase_dir / "index.json").read_text())
+        index = json.loads((phase_dir / "index.json").read_text(encoding="utf-8"))
         result = ex.StepExecutor._build_step_context(index)
         assert "Step 0 (setup): 프로젝트 초기화 완료" in result
         assert "Step 1 (core): 핵심 로직 구현" in result
 
     def test_excludes_pending(self, phase_dir):
-        index = json.loads((phase_dir / "index.json").read_text())
+        index = json.loads((phase_dir / "index.json").read_text(encoding="utf-8"))
         result = ex.StepExecutor._build_step_context(index)
         assert "ui" not in result
 
     def test_excludes_completed_without_summary(self, phase_dir):
-        index = json.loads((phase_dir / "index.json").read_text())
+        index = json.loads((phase_dir / "index.json").read_text(encoding="utf-8"))
         del index["steps"][0]["summary"]
         result = ex.StepExecutor._build_step_context(index)
         assert "setup" not in result
@@ -222,7 +222,7 @@ class TestBuildStepContext:
         assert result == ""
 
     def test_has_header(self, phase_dir):
-        index = json.loads((phase_dir / "index.json").read_text())
+        index = json.loads((phase_dir / "index.json").read_text(encoding="utf-8"))
         result = ex.StepExecutor._build_step_context(index)
         assert result.startswith("## 이전 Step 산출물")
 
@@ -245,9 +245,10 @@ class TestBuildPreamble:
         result = executor._build_preamble("", ctx)
         assert "이전 Step 산출물" in result
 
-    def test_includes_commit_example(self, executor):
+    def test_no_manual_commit_instruction(self, executor):
         result = executor._build_preamble("", "")
-        assert "feat(mvp):" in result
+        assert "직접 커밋하지 마라" in result
+        assert "executor가 자동으로 커밋" in result
 
     def test_includes_rules(self, executor):
         result = executor._build_preamble("", "")
@@ -460,7 +461,7 @@ class TestInvokeClaude:
             executor._invoke_claude(step, "preamble")
         assert exc_info.value.code == 1
 
-    def test_timeout_is_1800(self, executor):
+    def test_timeout_default_is_1800(self, executor):
         mock_result = MagicMock(returncode=0, stdout="{}", stderr="")
         step = {"step": 2, "name": "ui"}
 
@@ -468,6 +469,25 @@ class TestInvokeClaude:
             executor._invoke_claude(step, "preamble")
 
         assert mock_run.call_args[1]["timeout"] == 1800
+
+    def test_timeout_custom_via_constructor(self, executor):
+        executor._default_timeout = 3600
+        mock_result = MagicMock(returncode=0, stdout="{}", stderr="")
+        step = {"step": 2, "name": "ui"}
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            executor._invoke_claude(step, "preamble")
+
+        assert mock_run.call_args[1]["timeout"] == 3600
+
+    def test_timeout_per_step_override(self, executor):
+        mock_result = MagicMock(returncode=0, stdout="{}", stderr="")
+        step = {"step": 2, "name": "ui", "timeout": 600}
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            executor._invoke_claude(step, "preamble")
+
+        assert mock_run.call_args[1]["timeout"] == 600
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +544,7 @@ class TestCheckBlockers:
         d = tmp_project / "phases" / "test-phase"
         d.mkdir(exist_ok=True)
         index = {"project": "T", "phase": "test", "steps": steps}
-        (d / "index.json").write_text(json.dumps(index))
+        (d / "index.json").write_text(json.dumps(index), encoding="utf-8")
 
         with patch.object(ex, "ROOT", tmp_project):
             inst = ex.StepExecutor.__new__(ex.StepExecutor)
@@ -557,3 +577,22 @@ class TestCheckBlockers:
         with pytest.raises(SystemExit) as exc_info:
             inst._check_blockers()
         assert exc_info.value.code == 2
+
+    def test_error_before_completed_detected(self, tmp_project):
+        """정방향 순회로 앞쪽 error가 뒤쪽 completed에 가려지지 않는지 검증."""
+        steps = [
+            {"step": 0, "name": "bad", "status": "error", "error_message": "fail"},
+            {"step": 1, "name": "ok", "status": "completed"},
+        ]
+        inst = self._make_executor_with_steps(tmp_project, steps)
+        with pytest.raises(SystemExit) as exc_info:
+            inst._check_blockers()
+        assert exc_info.value.code == 1
+
+    def test_all_pending_passes(self, tmp_project):
+        steps = [
+            {"step": 0, "name": "a", "status": "pending"},
+            {"step": 1, "name": "b", "status": "pending"},
+        ]
+        inst = self._make_executor_with_steps(tmp_project, steps)
+        inst._check_blockers()  # should not raise
