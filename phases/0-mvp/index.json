@@ -48,7 +48,8 @@
     {
       "step": 6,
       "name": "ui-atoms",
-      "status": "pending"
+      "status": "completed",
+      "summary": "SentimentChart, InsightCard, CommentList, ReportHeader, EmptyState, ErrorState, LoadingState 7개 atom 컴포넌트 구현 (SVG 인라인, Tailwind only), vitest.config에 esbuild jsx automatic + cleanup setup 추가, 테스트 21개 통과, 전체 120개 통과, 빌드 성공"
     },
     {
       "step": 7,
