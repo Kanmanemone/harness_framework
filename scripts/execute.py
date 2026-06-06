@@ -240,6 +240,16 @@ class StepExecutor:
         timeout = step.get("timeout", self._default_timeout)
         # CLAUDECODE 환경변수를 제거하여 중첩 세션 차단을 우회
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        # Windows: git-bash 경로가 설정되지 않은 경우 자동 탐지
+        if sys.platform == "win32" and "CLAUDE_CODE_GIT_BASH_PATH" not in env:
+            for candidate in [
+                r"C:\Program Files\Git\bin\bash.exe",
+                r"C:\dev\Git\bin\bash.exe",
+                r"C:\Program Files (x86)\Git\bin\bash.exe",
+            ]:
+                if os.path.isfile(candidate):
+                    env["CLAUDE_CODE_GIT_BASH_PATH"] = candidate
+                    break
         result = subprocess.run(
             ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"],
             cwd=self._root, capture_output=True, text=True, timeout=timeout,
