@@ -54,17 +54,20 @@
     {
       "step": 7,
       "name": "ui-containers",
-      "status": "pending"
+      "status": "completed",
+      "summary": "ApiKeySettings(키 입력/마스킹/삭제/시크릿모드 안내), UrlInput(Enter 제출/disabled/에러 표시), ReportView(atom 조립+fade-in) 3개 컨테이너 컴포넌트 구현, 테스트 21개 통과, 전체 141개 통과, 빌드 성공"
     },
     {
       "step": 8,
       "name": "main-page",
-      "status": "pending"
+      "status": "completed",
+      "summary": "page.tsx(use client, 상태 8개, handleAnalyze/Retry/Reset/UrlChange/SaveKeys/DeleteKey, sentiment 정규화, mapErrorMessage+isApiKeyError 연동), layout.tsx(description+antialiased 추가), globals.css(fade-in 키프레임), 테스트 11개 통과, 전체 152개 통과, 빌드 성공"
     },
     {
       "step": 9,
       "name": "integration-test",
-      "status": "pending"
+      "status": "completed",
+      "summary": "ESLint 설정(eslint.config.mjs + eslint src/ 스크립트), 아키텍처 준수 검증 완료(CRITICAL 규칙, ADR-004/007/011/012, 슬롭 안티패턴 0건, console.log 0건, 런타임 deps 3개만), build+lint+test 전체 통과 (152개 테스트)"
     }
   ],
   "created_at": "2026-06-06T19:47:34+0900"
