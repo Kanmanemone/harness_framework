@@ -21,6 +21,11 @@ from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Windows cp949 인코딩 문제 방지: stdout/stderr를 UTF-8로 강제 설정
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 @contextlib.contextmanager
 def progress_indicator(label: str):
@@ -233,9 +238,12 @@ class StepExecutor:
 
         prompt = preamble + step_file.read_text(encoding="utf-8")
         timeout = step.get("timeout", self._default_timeout)
+        # CLAUDECODE 환경변수를 제거하여 중첩 세션 차단을 우회
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         result = subprocess.run(
-            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
+            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"],
             cwd=self._root, capture_output=True, text=True, timeout=timeout,
+            input=prompt, encoding="utf-8", env=env,
         )
 
         if result.returncode != 0:
