@@ -42,7 +42,8 @@
     {
       "step": 5,
       "name": "service-layer",
-      "status": "pending"
+      "status": "completed",
+      "summary": "youtubeService.ts(fetchComments — GET /api/youtube/comments 래퍼), analyzeService.ts(analyzeComments — POST /api/analyze 래퍼) 구현, 에러 코드 throw만 수행(메시지 변환 없음), 테스트 6개 통과, 전체 99개 통과, 빌드 성공"
     },
     {
       "step": 6,
