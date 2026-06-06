@@ -1,0 +1,16 @@
+{
+  "project": "YouTube Comment Analyzer",
+  "phase": "0-mvp",
+  "steps": [
+    { "step": 0, "name": "project-setup", "status": "pending" },
+    { "step": 1, "name": "core-types", "status": "pending" },
+    { "step": 2, "name": "lib-utils", "status": "pending" },
+    { "step": 3, "name": "api-youtube", "status": "pending" },
+    { "step": 4, "name": "api-analyze", "status": "pending" },
+    { "step": 5, "name": "service-layer", "status": "pending" },
+    { "step": 6, "name": "ui-atoms", "status": "pending" },
+    { "step": 7, "name": "ui-containers", "status": "pending" },
+    { "step": 8, "name": "main-page", "status": "pending" },
+    { "step": 9, "name": "integration-test", "status": "pending" }
+  ]
+}

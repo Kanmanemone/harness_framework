@@ -1,0 +1,312 @@
+
+❯ /harness 
+
+● A. 탐색
+
+  이전 대화에서 문서를 이미 상세히 작성하고 리뷰했으므로 프로젝트의
+  기획·아키텍처·설계 의도를 파악하고 있습니다.
+
+  B. 논의
+
+  구현 전에 확인이 필요한 사항이 있습니다.
+
+● User answered Claude's questions:
+  ⎿  · 테스트 프레임워크는 무엇을 사용할까요? CLAUDE.md에 TDD가 명시되어 
+     있고, AC에 npm test가 포함되어야 합니다. → Vitest (Recommended)
+     · 프로젝트 코드를 이 레포의 루트(src/)에 직접 만들까요, 아니면 하위 
+     디렉토리에 만들까요? 현재 레포에는 docs/, scripts/, phases/ 등 harness
+      프레임워크 파일이 있습니다. → 루트에 직접 (Recommended)
+
+● Vitest + 루트에 직접 구성으로 확정했습니다.
+
+  C. Step 설계
+
+  step 초안을 설계하겠습니다. 문서에 정의된 내용을 기반으로 레이어별로
+  분리합니다.
+
+  Step 0: project-setup
+    Next.js 15 프로젝트 초기화, Tailwind CSS 4, Vitest 설정, 보일러플레이트 정리
+
+  Step 1: core-types
+    types/index.ts — 모든 TypeScript 인터페이스 정의
+
+  Step 2: lib-utils
+    lib/youtube.ts, lib/storage.ts, lib/constants.ts + 각각의 단위 테스트
+
+  Step 3: api-youtube
+    app/api/youtube/comments/route.ts — YouTube Data API v3 프록시 + 테스트
+
+  Step 4: api-analyze
+    app/api/analyze/route.ts — Anthropic Messages API 프록시 + 테스트
+
+  Step 5: service-layer
+    services/youtubeService.ts, services/analyzeService.ts + 테스트
+
+  Step 6: ui-atoms
+    하위 컴포넌트: SentimentChart, InsightCard, CommentList, ReportHeader,
+    EmptyState, ErrorState, LoadingState
+
+  Step 7: ui-containers
+    상위 컴포넌트: ApiKeySettings, UrlInput, ReportView
+
+  Step 8: main-page
+    app/page.tsx — 상태 관리 + 전체 조립, app/layout.tsx, globals.css
+
+  Step 9: integration-test
+    전체 플로우 통합 테스트, 빌드 검증, 엣지 케이스 확인
+
+  설계 근거:
+  - Step 0~1은 기반 설정. 이후 step들이 의존하는 타입과 환경.
+  - Step 2는 순수 함수 레이어. 외부 의존 없이 테스트 가능.
+  - Step 3~4는 API Route 레이어. 각각 독립된 외부 API를 프록시하므로 분리.
+  - Step 5는 클라이언트→서버 연결 레이어.
+  - Step 6~7은 UI. atoms(props만 받는 표시 컴포넌트)과 containers(상태/이벤트를
+  가진 컴포넌트)로 분리.
+  - Step 8은 최종 조립.
+  - Step 9는 전체 검증.
+
+  이 구성에 대해 피드백이 있으면 말씀해 주세요. 승인하시면 파일을
+  생성하겠습니다.
+
+✻ Cooked for 46s
+
+❯ 승인 
+
+● Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Bash(mkdir -p C:/prj/harness_framework/phases/0-mvp)
+  ⎿  Done
+
+● D-1, D-2 인덱스 파일부터 생성하고, 이어서 step 파일 10개를 만들겠습니다.
+
+● Write(phases\index.json)
+  ⎿  Wrote 8 lines to phases\index.json
+      1 {
+      2   "phases": [
+      3     {
+      4       "dir": "0-mvp",
+      5       "status": "pending"
+      6     }
+      7   ]
+      8 }
+
+● Write(phases\0-mvp\index.json)
+  ⎿  Wrote 16 lines to phases\0-mvp\index.json
+       1 {
+       2   "project": "YouTube Comment Analyzer",
+       3   "phase": "0-mvp",
+       4   "steps": [
+       5     { "step": 0, "name": "project-setup", "status": "pending" },
+       6     { "step": 1, "name": "core-types", "status": "pending" },
+       7     { "step": 2, "name": "lib-utils", "status": "pending" },
+       8     { "step": 3, "name": "api-youtube", "status": "pending" },
+       9     { "step": 4, "name": "api-analyze", "status": "pending" },
+      10     { "step": 5, "name": "service-layer", "status": "pending" },
+     … +6 lines (ctrl+o to expand)
+
+● 이제 step 파일 10개를 생성합니다.
+
+● Write(phases\0-mvp\step0.md)
+  ⎿  Wrote 102 lines to phases\0-mvp\step0.md
+      1 # Step 0: project-setup
+      2 
+      3 ## 읽어야 할 파일
+      4 
+      5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+        라:
+      6 
+      7 - `/CLAUDE.md`
+      8 - `/docs/ARCHITECTURE.md` — 디렉토리 구조, 기술 스택
+      9 - `/docs/ADR.md` — ADR-001(Next.js), ADR-004(제로 의존성), ADR-00
+        6(다크모드)
+     … +92 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step1.md)
+  ⎿  Wrote 65 lines to phases\0-mvp\step1.md
+       1 # Step 1: core-types
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "타입 정의" 섹션 전체, "컴포넌트 Pro
+         ps" 섹션
+       9 - `/docs/PRD.md` — "핵심 기능" 섹션 (데이터 구조 이해용)
+      10 - `/src/app/layout.tsx` (Step 0에서 생성됨 — 프로젝트 구조 확인
+         용)
+     … +55 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step2.md)
+  ⎿  Wrote 104 lines to phases\0-mvp\step2.md
+       1 # Step 2: lib-utils
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "유틸리티 함수" 섹션, "Claude 프롬프
+         트 설계" 섹션, "에러 메시지 매핑" 섹션
+       9 - `/docs/PRD.md` — "지원하는 URL 형식", "에러 메시지 매핑" 테이
+         블
+      10 - `/docs/ADR.md` — ADR-007(JSON 프롬프트), ADR-011(입력 보존)
+     … +94 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step3.md)
+  ⎿  Wrote 93 lines to phases\0-mvp\step3.md
+       1 # Step 3: api-youtube
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "API 명세 > GET /api/youtube/comment
+         s" 섹션 전체, "에러 처리 전략 > API Route — YouTube 프록시" 섹션
+       9 - `/docs/ADR.md` — ADR-005(댓글 100개 제한), ADR-008(API 키 쿼리
+          파라미터)
+      10 - `/src/types/index.ts` (Step 1에서 생성됨)
+     … +83 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step4.md)
+  ⎿  Wrote 106 lines to phases\0-mvp\step4.md
+       1 # Step 4: api-analyze
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "API 명세 > POST /api/analyze" 섹션 
+         전체, "에러 처리 전략 > API Route — Claude 프록시" 섹션, "Claude
+          프롬프트 설계" 섹션
+       9 - `/docs/ADR.md` — ADR-002(Claude Sonnet), ADR-007(JSON 프롬프트
+         )
+      10 - `/src/types/index.ts` (Step 1에서 생성됨)
+     … +96 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step5.md)
+  ⎿  Wrote 79 lines to phases\0-mvp\step5.md
+       1 # Step 5: service-layer
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "에러 처리 전략 > 클라이언트 에러 수
+         신" 섹션, "에러 메시지 매핑" 섹션
+       9 - `/src/types/index.ts` (Step 1에서 생성됨)
+      10 - `/src/lib/constants.ts` (Step 2에서 생성됨 — mapErrorMessage, 
+         isApiKeyError)
+     … +69 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step6.md)
+  ⎿  Wrote 152 lines to phases\0-mvp\step6.md
+       1 # Step 6: ui-atoms
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "컴포넌트 Props" 섹션
+       9 - `/docs/UI_GUIDE.md` — 전체. 특히 "색상", "컴포넌트", "타이포그
+         래피", "인터랙티브 상태" 섹션.
+      10 - `/docs/PRD.md` — "핵심 기능 > 기능 3: 리포트 표시" 섹션
+     … +142 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step7.md)
+  ⎿  Wrote 122 lines to phases\0-mvp\step7.md
+       1 # Step 7: ui-containers
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "컴포넌트 Props" 섹션
+       9 - `/docs/UI_GUIDE.md` — "API 키 설정 패널", "URL 입력 + 분석 버
+         튼", "리포트" 관련 스펙
+      10 - `/docs/PRD.md` — "기능 4: API 키 관리", "사용자 경험 상세" 섹
+         션 전체, "키보드 접근성"
+     … +112 lines (ctrl+o to expand)
+  ⎿  You've hit your limit · resets 7:40pm (Asia/Seoul)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+❯ limit 때문에 중단된 작업 이어서 해줘 
+
+● step8, step9 파일을 이어서 생성하겠습니다.
+
+● Write(phases\0-mvp\step8.md)
+  ⎿  Wrote 173 lines to phases\0-mvp\step8.md
+       1 # Step 8: main-page
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "상태 관리" 섹션 전체, "데이터 흐름"
+          섹션 전체 (정상 흐름, 에러 흐름, 리포트→재분석 흐름)
+       9 - `/docs/PRD.md` — "사용자 경험 상세" 섹션 전체, "키보드 접근성"
+      10 - `/docs/UI_GUIDE.md` — "페이지 헤더", "레이아웃 > 페이지 구조",
+          "애니메이션"
+     … +163 lines (ctrl+o to expand)
+
+● Write(phases\0-mvp\step9.md)
+  ⎿  Wrote 127 lines to phases\0-mvp\step9.md
+       1 # Step 9: integration-test
+       2 
+       3 ## 읽어야 할 파일
+       4 
+       5 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하
+         라:
+       6 
+       7 - `/CLAUDE.md`
+       8 - `/docs/ARCHITECTURE.md` — "엣지 케이스 처리" 테이블 전체
+       9 - `/docs/PRD.md` — "사용자 시나리오" 섹션 전체 (18개 시나리오), 
+         "에러 메시지 매핑" 테이블
+      10 - `/docs/UI_GUIDE.md` — "AI 슬롭 안티패턴" 테이블
+     … +117 lines (ctrl+o to expand)
+
+● 모든 파일 생성을 확인하겠습니다.
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● 모든 파일이 생성되었습니다. 총 12개 파일:
+
+  phases/
+  ├── index.json              # 전체 현황 (0-mvp: pending)
+  └── 0-mvp/
+      ├── index.json           # task 상세 (10 steps, 모두 pending)
+      ├── step0.md             # project-setup: Next.js 15 + Tailwind 4 + Vitest
+   초기화
+      ├── step1.md             # core-types: TypeScript 인터페이스 정의
+      ├── step2.md             # lib-utils: youtube.ts, storage.ts, constants.ts
+   + 테스트
+      ├── step3.md             # api-youtube: YouTube API 프록시 Route + 테스트
+      ├── step4.md             # api-analyze: Claude API 프록시 Route + 테스트
+      ├── step5.md             # service-layer: 클라이언트 서비스 래퍼 + 테스트
+      ├── step6.md             # ui-atoms: 표시 전용 컴포넌트 7개 + 테스트
+      ├── step7.md             # ui-containers: ApiKeySettings, UrlInput,
+  ReportView + 테스트
+      ├── step8.md             # main-page: page.tsx 상태 관리 + 전체 조립 +
+  테스트
+      └── step9.md             # integration-test: 빌드/lint/테스트 검증 +
+  아키텍처 준수 확인
+
+  실행하려면:
+
+  python scripts/execute.py 0-mvp
+
+✻ Churned for 2m 20s
