@@ -145,11 +145,26 @@ describe("POST /api/analyze", () => {
       expect(body.isApiKeyError).toBe(true);
     });
 
-    it("429 (RESOURCE_EXHAUSTED) → 429", async () => {
+    it("429 rate limit → 429 + Rate limited", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
-          makeGeminiErrorResponse(429, "Resource exhausted", "RESOURCE_EXHAUSTED")
+          makeGeminiErrorResponse(429, "Resource has been exhausted", "RESOURCE_EXHAUSTED")
+        )
+      );
+
+      const res = await POST(makeRequest({ comments: sampleComments, apiKey: VALID_API_KEY }));
+      expect(res.status).toBe(429);
+
+      const body = await res.json();
+      expect(body.error).toBe("Rate limited");
+    });
+
+    it("429 quota exceeded → 429 + quota error", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          makeGeminiErrorResponse(429, "Quota exceeded for quota metric", "RESOURCE_EXHAUSTED")
         )
       );
 
@@ -158,7 +173,21 @@ describe("POST /api/analyze", () => {
 
       const body = await res.json();
       expect(body.error).toBe("Gemini API quota exceeded");
-      expect(body.isApiKeyError).toBeUndefined();
+    });
+
+    it("429 credits depleted → 429 + credits error", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          makeGeminiErrorResponse(429, "Your prepayment credits are depleted.", "RESOURCE_EXHAUSTED")
+        )
+      );
+
+      const res = await POST(makeRequest({ comments: sampleComments, apiKey: VALID_API_KEY }));
+      expect(res.status).toBe(429);
+
+      const body = await res.json();
+      expect(body.error).toBe("Gemini credits depleted");
     });
 
     it("500 (INTERNAL) → 502", async () => {

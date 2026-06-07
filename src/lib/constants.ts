@@ -1,6 +1,6 @@
 import type { Comment } from "@/types";
 
-export const GEMINI_MODEL = "gemini-2.0-flash";
+export const GEMINI_MODEL = "gemini-2.5-flash";
 export const GEMINI_MAX_TOKENS = 2048;
 export const YOUTUBE_TIMEOUT_MS = 15000;
 export const GEMINI_TIMEOUT_MS = 30000;
@@ -52,6 +52,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   videoNotFound: "영상을 찾을 수 없습니다. URL을 확인해 주세요.",
   "Invalid Gemini API key": "Gemini API 키가 유효하지 않습니다. 키를 확인해 주세요.",
   "Gemini API quota exceeded": "Gemini API 할당량을 초과했습니다. 잠시 후 다시 시도해 주세요.",
+  "Gemini credits depleted": "Gemini 선불 크레딧이 소진되었습니다. AI Studio에서 무료 티어 프로젝트로 새 키를 발급받으세요.",
   "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   "AI service temporarily unavailable": "AI 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.",
   "AI service timeout": "AI 응답이 너무 오래 걸립니다. 다시 시도해 주세요.",

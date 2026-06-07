@@ -84,6 +84,12 @@ export async function POST(request: Request): Promise<Response> {
     };
     const errorMessage = errorBody?.error?.message ?? "";
 
+    console.error("[Gemini API Error]", {
+      status: res.status,
+      errorStatus: errorBody?.error?.status,
+      message: errorMessage,
+    });
+
     if (errorMessage.includes("API key not valid") || errorBody?.error?.status === "UNAUTHENTICATED") {
       return Response.json(
         { error: "Invalid Gemini API key", isApiKeyError: true },
@@ -92,8 +98,12 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (res.status === 429 || errorBody?.error?.status === "RESOURCE_EXHAUSTED") {
+      const msg = errorMessage.toLowerCase();
+      let error = "Rate limited";
+      if (msg.includes("quota exceeded")) error = "Gemini API quota exceeded";
+      else if (msg.includes("credits are depleted") || msg.includes("prepayment")) error = "Gemini credits depleted";
       return Response.json(
-        { error: "Gemini API quota exceeded" },
+        { error },
         { status: 429 }
       );
     }

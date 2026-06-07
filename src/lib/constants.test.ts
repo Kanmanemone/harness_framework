@@ -13,7 +13,7 @@ import type { Comment } from "@/types";
 describe("constants", () => {
   describe("상수 값", () => {
     it("GEMINI_MODEL", () => {
-      expect(GEMINI_MODEL).toBe("gemini-2.0-flash");
+      expect(GEMINI_MODEL).toBe("gemini-2.5-flash");
     });
 
     it("GEMINI_MAX_TOKENS", () => {

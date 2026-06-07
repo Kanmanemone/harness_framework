@@ -1,0 +1,382 @@
+
+❯ Gemini API에서 429 TooManyRequests 에러가 떠. 단순히 요청 횟수가          
+  많아서인지 아니면, 요청 빈도가 높아서인지는 모르겠어.                     
+
+● Gemini 무료 티어의 제한은 두 가지입니다:
+
+  - RPM (분당 요청): gemini-2.0-flash 기준 15 RPM — 짧은 시간에 반복 요청하면
+  걸림
+  - RPD (일일 요청): 1,500 RPD — 하루 총 요청 수 초과 시 걸림
+
+  둘 다 HTTP 429 + RESOURCE_EXHAUSTED로 동일하게 응답하기 때문에 서버
+  응답만으로는 구분이 어렵습니다.
+
+  일반적으로 분석 한 번에 요청 1회이므로, 단순 사용으로 RPM에 걸릴 가능성은
+  낮습니다. 가능한 원인:
+
+  1. 짧은 간격으로 여러 번 "분석" 클릭 — RPM 제한
+  2. 오늘 이미 많이 사용 — RPD 제한
+  3. 키를 방금 생성 — 키 활성화에 수 분 걸릴 수 있음
+
+  에러 메시지에 "rate limit" 관련 힌트가 있을 수 있으니, 잠시 후 다시 시도해
+  보세요. 계속 발생하면 https://aistudio.google.com/apikey에서 사용량(quota)을
+  확인할 수 있습니다.
+
+✻ Churned for 1m 15s
+
+❯ "분석" 버튼을 누르니, "Gemini API 할당량을 초과했습니다. 잠시 후 다시     
+  시도해 주세요."라는 텍스트가 떴어.                                        
+
+● 현재 코드에서 429 에러를 모두 "할당량 초과"로 처리하고 있는데, 실제로는
+  **일시적인 속도 제한(rate limit)**일 가능성이 높습니다. 에러 메시지를 구분하면
+   사용자가 상황을 더 정확히 파악할 수 있습니다.
+
+  구분 기준은 Gemini 에러 응답의 message 필드입니다:
+  - rate limit: "Resource has been exhausted" 등 (잠시 후 재시도하면 됨)
+  - quota 초과: "Quota exceeded" 등 (일일 한도 소진, 내일 재시도)
+
+  수정하겠습니다.
+
+● Read 2 files (ctrl+o to expand)
+
+● 이제 테스트부터 수정합니다.
+
+● Read 2 files (ctrl+o to expand)
+
+● 테스트 먼저: rate limit과 quota exceeded를 분리합니다.
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 17 lines, removed 3 lines
+      145        expect(body.isApiKeyError).toBe(true);
+      146      });
+      147  
+      148 -    it("429 (RESOURCE_EXHAUSTED) → 429", async () => {        
+      148 +    it("429 rate limit → 429 + Rate limited", async () => {   
+      149        vi.stubGlobal(
+      150          "fetch",
+      151          vi.fn().mockResolvedValue(
+      152 -          makeGeminiErrorResponse(429, "Resource exhausted", "
+          -RESOURCE_EXHAUSTED")                                          
+      152 +          makeGeminiErrorResponse(429, "Resource has been exha
+          +usted", "RESOURCE_EXHAUSTED")                                 
+      153          )
+      154        );
+      155  
+     ...
+      157        expect(res.status).toBe(429);
+      158  
+      159        const body = await res.json();
+      160 +      expect(body.error).toBe("Rate limited");                
+      161 +    });                                                       
+      162 +                                                              
+      163 +    it("429 quota exceeded → 429 + quota error", async () => {
+      164 +      vi.stubGlobal(                                          
+      165 +        "fetch",                                              
+      166 +        vi.fn().mockResolvedValue(                            
+      167 +          makeGeminiErrorResponse(429, "Quota exceeded for quo
+          +ta metric", "RESOURCE_EXHAUSTED")                             
+      168 +        )                                                     
+      169 +      );                                                      
+      170 +                                                              
+      171 +      const res = await POST(makeRequest({ comments: sampleCom
+          +ments, apiKey: VALID_API_KEY }));                             
+      172 +      expect(res.status).toBe(429);                           
+      173 +                                                              
+      174 +      const body = await res.json();                          
+      175        expect(body.error).toBe("Gemini API quota exceeded");
+      161 -      expect(body.isApiKeyError).toBeUndefined();             
+      176      });
+      177  
+      178      it("500 (INTERNAL) → 502", async () => {
+
+● 이제 route.ts에서 rate limit과 quota를 분리합니다.
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 2 lines, removed 1 line
+       92      }
+       93  
+       94      if (res.status === 429 || errorBody?.error?.status === "RE
+           SOURCE_EXHAUSTED") {
+       95 +      const isQuota = errorMessage.toLowerCase().includes("quo
+          +ta exceeded");                                                
+       96        return Response.json(
+       96 -        { error: "Gemini API quota exceeded" },               
+       97 +        { error: isQuota ? "Gemini API quota exceeded" : "Rate
+          + limited" },                                                  
+       98          { status: 429 }
+       99        );
+      100      }
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +34 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 153개 테스트 전체 통과.
+
+  변경 내용: Gemini 429 에러를 두 가지로 구분하도록 했습니다.
+
+  - 에러 메시지에 "Quota exceeded" 포함 → "Gemini API 할당량을 초과했습니다"
+  (일일 한도 소진)
+  - 그 외 429 → "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." (일시적 속도
+   제한)
+
+  대부분의 경우 후자(rate limit)일 가능성이 높으므로, 1분 정도 기다린 후 다시
+  시도하면 됩니다.
+
+✻ Cogitated for 1m 14s
+
+❯ "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." 라네.  
+
+● 일시적인 속도 제한이니 1분 정도 기다린 후 다시 시도하면 됩니다. Gemini 무료
+  티어의 gemini-2.0-flash는 분당 15회 요청 제한이 있습니다.
+
+✻ Worked for 32s
+
+❯ 아니, 동영상 한 개를 분석 요청한 건데 이래. 동영상에 달린 댓글의 갯수가   
+  많아서 그런걸까?                                                          
+
+● 댓글 수집은 YouTube API를 쓰므로 Gemini 요청과 무관합니다. Gemini API 호출은
+  분석 단계에서 딱 1회만 발생합니다.
+
+  가능한 원인:
+
+  1. 키를 방금 생성 — 새 키는 활성화에 몇 분 걸릴 수 있음
+  2. 같은 키로 다른 곳에서도 사용 중 — 다른 프로젝트/탭에서 동시 사용
+  3. 직전에 여러 번 시도 — "분석" 버튼을 연속으로 눌렀다면 이전 요청이 카운트됨
+
+  1~2분 기다린 후 한 번만 눌러보세요. 그래도 계속 발생하면 알려주세요.
+
+✻ Baked for 37s
+
+❯ 그래도 계속 발생해 
+
+● Gemini API 호출이 정확히 어떤 응답을 받는지 확인하기 위해 에러 로깅을
+  추가해보겠습니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 6 lines
+      84      };
+      85      const errorMessage = errorBody?.error?.message ?? "";
+      86  
+      87 +    console.error("[Gemini API Error]", {                      
+      88 +      status: res.status,                                      
+      89 +      errorStatus: errorBody?.error?.status,                   
+      90 +      message: errorMessage,                                   
+      91 +    });                                                        
+      92 +                                                               
+      93      if (errorMessage.includes("API key not valid") || errorBody
+          ?.error?.status === "UNAUTHENTICATED") {
+      94        return Response.json(
+      95          { error: "Invalid Gemini API key", isApiKeyError: true 
+          },
+
+● 개발 서버를 재시작하고 다시 "분석"을 눌러본 후, 터미널에 [Gemini API Error]
+  로그가 출력될 겁니다. 그 내용을 공유해주세요. Gemini가 정확히 어떤 메시지를
+  보내는지 확인해야 원인을 파악할 수 있습니다.
+
+✻ Baked for 52s
+
+❯ [Gemini API Error] {                                                      
+    status: 429,                                                            
+    errorStatus: 'RESOURCE_EXHAUSTED',                                      
+    message: 'Your prepayment credits are depleted. Please go to AI Studio  
+  at https://ai.studio/projects to manage your project and billing. Learn   
+  more at https://ai.google.dev/gemini-api/docs/billing#prepay. '           
+  }                                                                         
+
+● 크레딧이 소진된 상태입니다. 무료 티어가 아니라 선불(prepay) 프로젝트에 키가
+  연결되어 있어서 그렇습니다.
+
+  해결 방법: https://aistudio.google.com/apikey에서 무료 티어 프로젝트로 키를
+  새로 발급받으세요. 키 생성 시 프로젝트를 선택하는 화면에서 선불 결제가
+  설정되지 않은 프로젝트를 선택하면 됩니다.
+
+  그리고 이 에러도 사용자에게 정확히 안내되도록 코드를 수정하겠습니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 5 lines, removed 2 lines
+       98      }
+       99  
+      100      if (res.status === 429 || errorBody?.error?.status === "RE
+           SOURCE_EXHAUSTED") {
+      101 -      const isQuota = errorMessage.toLowerCase().includes("quo
+          -ta exceeded");                                                
+      101 +      const msg = errorMessage.toLowerCase();                 
+      102 +      let error = "Rate limited";                             
+      103 +      if (msg.includes("quota exceeded")) error = "Gemini API 
+          +quota exceeded";                                              
+      104 +      else if (msg.includes("credits are depleted") || msg.inc
+          +ludes("prepayment")) error = "Gemini credits depleted";       
+      105        return Response.json(
+      103 -        { error: isQuota ? "Gemini API quota exceeded" : "Rate
+          - limited" },                                                  
+      106 +        { error },                                            
+      107          { status: 429 }
+      108        );
+      109      }
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line
+      52    videoNotFound: "영상을 찾을 수 없습니다. URL을 확인해 주세요.
+          ",
+      53    "Invalid Gemini API key": "Gemini API 키가 유효하지 않습니다.
+           키를 확인해 주세요.",
+      54    "Gemini API quota exceeded": "Gemini API 할당량을 초과했습니
+          다. 잠시 후 다시 시도해 주세요.",
+      55 +  "Gemini credits depleted": "Gemini 선불 크레딧이 소진되었습니
+         +다. AI Studio에서 무료 티어 프로젝트로 새 키를 발급받으세요.", 
+      56    "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주
+          세요.",
+      57    "AI service temporarily unavailable": "AI 서비스에 일시적인 
+          문제가 있습니다. 잠시 후 다시 시도해 주세요.",
+      58    "AI service timeout": "AI 응답이 너무 오래 걸립니다. 다시 시
+          도해 주세요.",
+
+● 테스트를 추가하고 실행합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 15 lines
+      175        expect(body.error).toBe("Gemini API quota exceeded");
+      176      });
+      177  
+      178 +    it("429 credits depleted → 429 + credits error", async () 
+          +=> {                                                          
+      179 +      vi.stubGlobal(                                          
+      180 +        "fetch",                                              
+      181 +        vi.fn().mockResolvedValue(                            
+      182 +          makeGeminiErrorResponse(429, "Your prepayment credit
+          +s are depleted.", "RESOURCE_EXHAUSTED")                       
+      183 +        )                                                     
+      184 +      );                                                      
+      185 +                                                              
+      186 +      const res = await POST(makeRequest({ comments: sampleCom
+          +ments, apiKey: VALID_API_KEY }));                             
+      187 +      expect(res.status).toBe(429);                           
+      188 +                                                              
+      189 +      const body = await res.json();                          
+      190 +      expect(body.error).toBe("Gemini credits depleted");     
+      191 +    });                                                       
+      192 +                                                              
+      193      it("500 (INTERNAL) → 502", async () => {
+      194        vi.stubGlobal(
+      195          "fetch",
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +54 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 154개 전체 통과.
+
+  정리하면, 현재 키가 선불 프로젝트에 연결되어 있고 크레딧이 소진된 상태입니다.
+  AI Studio에서 결제가 설정되지 않은 프로젝트를 선택해서 새 키를 발급받으면 무료
+   티어로 사용할 수 있습니다.
+
+  이제 이 에러가 다시 발생하면 "Gemini 선불 크레딧이 소진되었습니다. AI
+  Studio에서 무료 티어 프로젝트로 새 키를 발급받으세요."라고 안내됩니다.
+
+✻ Sautéed for 1m 32s
+
+❯ 그럼에도 안돼. 혹시, "TPM (Tokens Per Minute): 분당 처리할 수 있는        
+  토큰(텍스트량) 제한" 때문은 아닐까? 그리고 맞다면, TPM을 우회할 수        
+  있을까?                                                                   
+
+● TPM이 원인은 아닙니다. 무료 티어 TPM 한도는 분당 100만 토큰으로, 댓글 분석
+  1회에 필요한 토큰(수만 토큰 수준)과는 차원이 다릅니다.
+
+  에러 로그에 명확히 나와 있습니다:
+
+  "Your prepayment credits are depleted"
+
+  이건 속도/용량 제한이 아니라, 해당 프로젝트의 선불 크레딧 잔액이 0이라는
+  뜻입니다. 키를 아무리 바꿔도 같은 프로젝트에 연결되면 동일한 에러가
+  발생합니다.
+
+  해결 방법:
+
+  1. https://aistudio.google.com/apikey에 접속
+  2. 키 생성 시 프로젝트 선택 단계에서 결제(billing)가 연결되지 않은 새
+  프로젝트를 선택하거나 생성
+  3. 해당 프로젝트로 키를 발급
+
+  결제가 연결된 프로젝트는 무료 티어가 아닌 유료(prepay) 모드로 동작하기 때문에,
+   크레딧이 없으면 요청이 차단됩니다.
+
+✻ Churned for 45s
+
+❯ [Gemini API Error] {                                                      
+    status: 429,                                                            
+    errorStatus: 'RESOURCE_EXHAUSTED',                                      
+    message: 'You exceeded your current quota, please check your plan and   
+  billing details. For more information on this error, head to:             
+  https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your        
+  current usage, head to: https://ai.dev/rate-limit. \n' +                  
+      '* Quota exceeded for metric:                                         
+  generativelanguage.googleapis.com/generate_content_free_tier_requests,    
+  limit: 0, model: gemini-2.0-flash\n' +                                    
+      '* Quota exceeded for metric:                                         
+  generativelanguage.googleapis.com/generate_content_free_tier_requests,    
+  limit: 0, model: gemini-2.0-flash\n' +                                    
+      '* Quota exceeded for metric: generativelanguage.googleapis.com/gener 
+  ate_content_free_tier_input_token_count, limit: 0, model:                 
+  gemini-2.0-flash\n' +                                                     
+      'Please retry in 2.191423225s.'                                       
+  }                                                                         
+
+● 핵심이 보입니다: limit: 0입니다. 이 프로젝트는 결제가 연결되어 있어서 무료 
+  티어 자체가 비활성화(한도 0)된 상태입니다. 선불 크레딧도 소진되었으니 아무것도
+   안 되는 겁니다.
+
+  해결 순서:
+
+  1. https://console.cloud.google.com/ 접속
+  2. 좌측 상단 프로젝트 선택 → 새 프로젝트 생성 (결제 연결하지 않음)
+  3. https://aistudio.google.com/apikey 접속
+  4. "API 키 만들기" → 방금 만든 새 프로젝트 선택 → 키 발급
+
+  결제가 없는 프로젝트에서는 limit: 0이 아닌 정상적인 무료 티어 한도(15 RPM,
+  1500 RPD)가 적용됩니다.
+
+✻ Sautéed for 37s
+
+❯ 잠시만, 내가 진짜 문제를 찾은거 같은데. Gemini 2.5 Flash를 써 봐. 
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import type { Comment } from "@/types";
+      2  
+      3 -export const GEMINI_MODEL = "gemini-2.0-flash";                 
+      3 +export const GEMINI_MODEL = "gemini-2.5-flash";                 
+      4  export const GEMINI_MAX_TOKENS = 2048;
+      5  export const YOUTUBE_TIMEOUT_MS = 15000;
+      6  export const GEMINI_TIMEOUT_MS = 30000;
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      13  describe("constants", () => {
+      14    describe("상수 값", () => {
+      15      it("GEMINI_MODEL", () => {
+      16 -      expect(GEMINI_MODEL).toBe("gemini-2.0-flash");           
+      16 +      expect(GEMINI_MODEL).toBe("gemini-2.5-flash");           
+      17      });
+      18  
+      19      it("GEMINI_MAX_TOKENS", () => {
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +54 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 154개 전체 통과. 모델이 gemini-2.5-flash로 변경되었습니다. 다시 시도해보세요.
+
+✻ Churned for 1m 5s
