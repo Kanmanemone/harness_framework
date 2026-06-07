@@ -40,10 +40,10 @@ describe("constants", () => {
       expect(prompt).toContain("2 comments");
     });
 
-    it("댓글을 [번호] (Likes: N) 텍스트 형식으로 나열한다", () => {
+    it("댓글을 [번호] (작성자, Likes: N) 텍스트 형식으로 나열한다", () => {
       const prompt = buildAnalysisPrompt(comments);
-      expect(prompt).toContain("[1] (Likes: 42) 좋은 영상 감사합니다");
-      expect(prompt).toContain("[2] (Likes: 15) 음질이 좀 아쉽네요");
+      expect(prompt).toContain("[1] (홍길동, Likes: 42) 좋은 영상 감사합니다");
+      expect(prompt).toContain("[2] (김철수, Likes: 15) 음질이 좀 아쉽네요");
     });
 
     it("JSON 스키마 구조를 포함한다", () => {

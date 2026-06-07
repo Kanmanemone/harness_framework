@@ -1,0 +1,99 @@
+
+❯ 결과 화면에서 댓글을 누가 썼는지가 전부 "name" 또는 ""으로 되어 있네.     
+  뭔가 문제가 있어. 진짜 이름을 표시하도록 수정.                            
+
+● Let me trace the flow of comment author data from the API to the UI.
+
+● Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Found it. The prompt at line 13 sends comments as [1] (Likes: 42) comment text
+   — it strips the author name. Then in the response schema it asks for
+  "author": "name" as a placeholder, so Gemini literally returns "name" or empty
+   string since it has no author info to work with.
+
+  The fix: include the author name in the prompt's comment lines.
+
+● Read 1 file (ctrl+o to expand)
+
+● Two changes needed:
+
+  1. Line 13: Include author name in comment lines sent to Gemini
+  2. Line 35: Clarify that "author" should be the actual commenter's name from
+  the data
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      10   */
+      11  export function buildAnalysisPrompt(comments: Comment[]): strin
+          g {
+      12    const commentLines = comments
+      13 -    .map((c, i) => `[${i + 1}] (Likes: ${c.likeCount}) ${c.text
+         -}`)                                                            
+      13 +    .map((c, i) => `[${i + 1}] (${c.author}, Likes: ${c.likeCou
+         +nt}) ${c.text}`)                                               
+      14      .join("\n");
+      15  
+      16    return `You are analyzing YouTube video comments to produce a
+           sentiment report.
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      32    "strengths": ["max 5 items"],
+      33    "improvements": ["max 5 items"],
+      34    "representativeComments": {
+      35 -    "positive": [{ "text": "exact comment", "author": "name" }]
+         -,                                                              
+      35 +    "positive": [{ "text": "exact comment text", "author": "exa
+         +ct author name from data" }],                                  
+      36      "neutral": [...],
+      37      "negative": [...]
+      38    }
+
+● Now update the test that checks the prompt format.
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Update(src\lib\constants.test.ts)
+  ⎿  File must be read first
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      40        expect(prompt).toContain("2 comments");
+      41      });
+      42  
+      43 -    it("댓글을 [번호] (Likes: N) 텍스트 형식으로 나열한다", () 
+         -=> {                                                           
+      43 +    it("댓글을 [번호] (작성자, Likes: N) 텍스트 형식으로 나열한
+         +다", () => {                                                   
+      44        const prompt = buildAnalysisPrompt(comments);
+      45 -      expect(prompt).toContain("[1] (Likes: 42) 좋은 영상 감사 
+         -합니다");                                                      
+      46 -      expect(prompt).toContain("[2] (Likes: 15) 음질이 좀 아쉽 
+         -네요");                                                        
+      45 +      expect(prompt).toContain("[1] (홍길동, Likes: 42) 좋은 영
+         +상 감사합니다");                                               
+      46 +      expect(prompt).toContain("[2] (김철수, Likes: 15) 음질이 
+         +좀 아쉽네요");                                                 
+      47      });
+      48  
+      49      it("JSON 스키마 구조를 포함한다", () => {
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1 | tail -15)
+  ⎿  [Gemini Parse Error] Error: No JSON object found
+         at extractJson (C:\prj\harness_framework\src\app\api\analyze\route
+     .ts:22:11)
+     … +14 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● 195 tests pass. The fix is two-fold:
+
+  1. src/lib/constants.ts:13 — Comment lines now include the author name: [1] 
+  (홍길동, Likes: 42) 좋은 영상 감사합니다 instead of [1] (Likes: 42) 좋은 영상 
+  감사합니다
+  2. src/lib/constants.ts:35 — The JSON schema example now says "author": "exact
+   author name from data" instead of "author": "name", so Gemini knows to use
+  the actual name from the input data
+
+✻ Sautéed for 2m 12s

@@ -10,7 +10,7 @@ export const GEMINI_TIMEOUT_MS = 60000;
  */
 export function buildAnalysisPrompt(comments: Comment[]): string {
   const commentLines = comments
-    .map((c, i) => `[${i + 1}] (Likes: ${c.likeCount}) ${c.text}`)
+    .map((c, i) => `[${i + 1}] (${c.author}, Likes: ${c.likeCount}) ${c.text}`)
     .join("\n");
 
   return `You are analyzing YouTube video comments to produce a sentiment report.
@@ -32,7 +32,7 @@ Analyze these comments and return a JSON object with EXACTLY this structure
   "strengths": ["max 5 items"],
   "improvements": ["max 5 items"],
   "representativeComments": {
-    "positive": [{ "text": "exact comment", "author": "name" }],
+    "positive": [{ "text": "exact comment text", "author": "exact author name from data" }],
     "neutral": [...],
     "negative": [...]
   }
