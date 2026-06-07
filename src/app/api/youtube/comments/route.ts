@@ -4,7 +4,7 @@ import type { Comment, YouTubeCommentsResponse } from "@/types";
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const videoId = searchParams.get("videoId");
-  const apiKey = searchParams.get("apiKey");
+  const apiKey = searchParams.get("apiKey") || process.env.YOUTUBE_API_KEY;
   const maxResults = searchParams.get("maxResults") ?? "100";
 
   if (!videoId || !apiKey) {

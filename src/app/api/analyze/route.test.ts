@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "./route";
 
 const VALID_API_KEY = "test-gemini-key-123";
@@ -111,7 +111,8 @@ describe("POST /api/analyze", () => {
       expect(body.error).toBe("Missing comments or apiKey");
     });
 
-    it("apiKey 없음 → 400", async () => {
+    it("apiKey 없음 + env 없음 → 400", async () => {
+      delete process.env.GEMINI_API_KEY;
       const res = await POST(makeRequest({ comments: sampleComments }));
       expect(res.status).toBe(400);
 
@@ -125,6 +126,49 @@ describe("POST /api/analyze", () => {
 
       const body = await res.json();
       expect(body.error).toBe("No comments to analyze");
+    });
+  });
+
+  describe("env 폴백", () => {
+    it("apiKey 미전달 + GEMINI_API_KEY env 설정 → env 키로 요청", async () => {
+      process.env.GEMINI_API_KEY = "env-gemini-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeGeminiResponse(JSON.stringify(validReport)));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await POST(makeRequest({ comments: sampleComments }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=env-gemini-key");
+    });
+
+    it("apiKey 빈 문자열 + GEMINI_API_KEY env 설정 → env 키로 요청", async () => {
+      process.env.GEMINI_API_KEY = "env-gemini-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeGeminiResponse(JSON.stringify(validReport)));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await POST(makeRequest({ comments: sampleComments, apiKey: "" }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=env-gemini-key");
+    });
+
+    it("apiKey 전달 시 env보다 우선", async () => {
+      process.env.GEMINI_API_KEY = "env-gemini-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeGeminiResponse(JSON.stringify(validReport)));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await POST(makeRequest({ comments: sampleComments, apiKey: "user-key" }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=user-key");
+      expect(calledUrl).not.toContain("key=env-gemini-key");
+    });
+
+    afterEach(() => {
+      delete process.env.GEMINI_API_KEY;
     });
   });
 

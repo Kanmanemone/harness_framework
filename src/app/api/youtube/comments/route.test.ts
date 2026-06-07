@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET } from "./route";
 
 const VALID_VIDEO_ID = "dQw4w9WgXcQ";
@@ -146,12 +146,56 @@ describe("GET /api/youtube/comments", () => {
       expect(body.error).toBe("Missing videoId or apiKey");
     });
 
-    it("apiKey 없으면 400", async () => {
+    it("apiKey 없으면 + env 없으면 400", async () => {
+      delete process.env.YOUTUBE_API_KEY;
       const res = await GET(makeRequest({ videoId: VALID_VIDEO_ID }));
       expect(res.status).toBe(400);
 
       const body = await res.json();
       expect(body.error).toBe("Missing videoId or apiKey");
+    });
+  });
+
+  describe("env 폴백", () => {
+    afterEach(() => {
+      delete process.env.YOUTUBE_API_KEY;
+    });
+
+    it("apiKey 미전달 + YOUTUBE_API_KEY env 설정 → env 키로 요청", async () => {
+      process.env.YOUTUBE_API_KEY = "env-yt-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeResponse([], 0));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await GET(makeRequest({ videoId: VALID_VIDEO_ID }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=env-yt-key");
+    });
+
+    it("apiKey 빈 문자열 + YOUTUBE_API_KEY env 설정 → env 키로 요청", async () => {
+      process.env.YOUTUBE_API_KEY = "env-yt-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeResponse([], 0));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await GET(makeRequest({ videoId: VALID_VIDEO_ID, apiKey: "" }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=env-yt-key");
+    });
+
+    it("apiKey 전달 시 env보다 우선", async () => {
+      process.env.YOUTUBE_API_KEY = "env-yt-key";
+      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeResponse([], 0));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const res = await GET(makeRequest({ videoId: VALID_VIDEO_ID, apiKey: "user-key" }));
+      expect(res.status).toBe(200);
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("key=user-key");
+      expect(calledUrl).not.toContain("key=env-yt-key");
     });
   });
 

@@ -1,0 +1,704 @@
+
+❯ 이번엔 "분석 결과를 처리하지 못했습니다. 다시 시도해 주세요."라는 에러가  
+  뜨네. 그런데, 이렇게 주먹구구식으로 일을 진행하고 싶지 않아. 앱에서는 API 
+   Key를 사용자가 입력하지만, 개발 단계에서는 ".env" 파일에서 API Key를     
+  읽어서 너가 스스로 테스트할 수 있게 바꿔야 겠어. 에러 분석에 앞서 먼저    
+  구조부터 바꾸자.                                                          
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Searched for 3 patterns, read 2 files (ctrl+o to expand)
+
+● 구조가 명확합니다. 바로 계획을 작성합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭─────────────────────────────────────────────────────────────────────────╮
+     │ .env 기반 개발용 API 키 폴백 구조                                       │
+     │                                                                         │
+     │ Context                                                                 │
+     │                                                                         │
+     │ 현재 API 키는 사용자가 UI에서 입력 → localStorage 저장 → 클라이언트가   │
+     │ 요청 body에 포함 → 서버 라우트가 사용하는 구조.                         │
+     │ 개발 중에는 매번 UI에서 키를 입력하지 않고 .env.local에서 자동으로 읽어 │
+     │  테스트할 수 있어야 함.                                                 │
+     │ .gitignore에 .env*가 이미 등록되어 있으므로 키 노출 위험 없음.          │
+     │                                                                         │
+     │ 변경 요약                                                               │
+     │                                                                         │
+     │ 1. .env.example 생성                                                    │
+     │                                                                         │
+     │ YOUTUBE_API_KEY=                                                        │
+     │ GEMINI_API_KEY=                                                         │
+     │ 사용자가 .env.local에 실제 키를 넣으면 됨.                              │
+     │                                                                         │
+     │ 2. API Route: env 폴백 추가 (2개 파일)                                  │
+     │                                                                         │
+     │ src/app/api/analyze/route.ts                                            │
+     │ - const key = apiKey || process.env.GEMINI_API_KEY                      │
+     │ - key 없으면 기존대로 400 에러                                          │
+     │                                                                         │
+     │ src/app/api/youtube/comments/route.ts                                   │
+     │ - const key = apiKey || process.env.YOUTUBE_API_KEY                     │
+     │ - key 없으면 기존대로 400 에러                                          │
+     │                                                                         │
+     │ 3. 클라이언트: env 키 존재 여부 확인                                    │
+     │                                                                         │
+     │ src/app/api/env-keys/route.ts (신규)                                    │
+     │ - GET → { youtube: boolean, gemini: boolean } 반환                      │
+     │ - process.env.YOUTUBE_API_KEY와 process.env.GEMINI_API_KEY 존재 여부만  │
+     │ 반환 (값은 노출하지 않음)                                               │
+     │                                                                         │
+     │ src/app/page.tsx                                                        │
+     │ - 마운트 시 /api/env-keys 호출                                          │
+     │ - env 키가 있으면 해당 필드의 키 입력을 요구하지 않음 (설정 패널 자동   │
+     │ 닫기 조건에 반영)                                                       │
+     │ - analyzeComments와 fetchComments 호출 시 env 키가 있는 필드는 빈       │
+     │ 문자열 전달 → 서버에서 env 폴백 사용                                    │
+     │                                                                         │
+     │ 변경 파일                                                               │
+     │                                                                         │
+     │ ┌───────────────────────────────────────────────┬──────┐                │
+     │ │                     파일                      │ 유형 │                │
+     │ ├───────────────────────────────────────────────┼──────┤                │
+     │ │ .env.example                                  │ 신규 │                │
+     │ ├───────────────────────────────────────────────┼──────┤                │
+     │ │ src/app/api/analyze/route.ts (+test)          │ 수정 │                │
+     │ ├───────────────────────────────────────────────┼──────┤                │
+     │ │ src/app/api/youtube/comments/route.ts (+test) │ 수정 │                │
+     │ ├───────────────────────────────────────────────┼──────┤                │
+     │ │ src/app/api/env-keys/route.ts (+test)         │ 신규 │                │
+     │ ├───────────────────────────────────────────────┼──────┤                │
+     │ │ src/app/page.tsx (+test)                      │ 수정 │                │
+     │ └───────────────────────────────────────────────┴──────┘                │
+     │                                                                         │
+     │ 검증                                                                    │
+     │                                                                         │
+     │ - .env.local에 키 없이 → 기존대로 UI에서 키 입력 필요                   │
+     │ - .env.local에 키 설정 → 설정 패널 없이 바로 분석 가능                  │
+     │ - npm run test 통과                                                     │
+     ╰─────────────────────────────────────────────────────────────────────────╯
+
+❯ 방금 plan에 대해 "clear context (68% used) and auto-accept edits (shift+tab)" 수행
+
+ ▐▛███▜▌   Claude Code v2.1.50
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    C:\prj\harness_framework
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ .env 기반 개발용 API 키 폴백 구조                                            │
+│                                                                              │
+│ Context                                                                      │
+│                                                                              │
+│ 현재 API 키는 사용자가 UI에서 입력 → localStorage 저장 → 클라이언트가 요청   │
+│ body에 포함 → 서버 라우트가 사용하는 구조.                                   │
+│ 개발 중에는 매번 UI에서 키를 입력하지 않고 .env.local에서 자동으로 읽어      │
+│ 테스트할 수 있어야 함.                                                       │
+│ .gitignore에 .env*가 이미 등록되어 있으므로 키 노출 위험 없음.               │
+│                                                                              │
+│ 변경 요약                                                                    │
+│                                                                              │
+│ 1. .env.example 생성                                                         │
+│                                                                              │
+│ YOUTUBE_API_KEY=                                                             │
+│ GEMINI_API_KEY=                                                              │
+│ 사용자가 .env.local에 실제 키를 넣으면 됨.                                   │
+│                                                                              │
+│ 2. API Route: env 폴백 추가 (2개 파일)                                       │
+│                                                                              │
+│ src/app/api/analyze/route.ts                                                 │
+│ - const key = apiKey || process.env.GEMINI_API_KEY                           │
+│ - key 없으면 기존대로 400 에러                                               │
+│                                                                              │
+│ src/app/api/youtube/comments/route.ts                                        │
+│ - const key = apiKey || process.env.YOUTUBE_API_KEY                          │
+│ - key 없으면 기존대로 400 에러                                               │
+│                                                                              │
+│ 3. 클라이언트: env 키 존재 여부 확인                                         │
+│                                                                              │
+│ src/app/api/env-keys/route.ts (신규)                                         │
+│ - GET → { youtube: boolean, gemini: boolean } 반환                           │
+│ - process.env.YOUTUBE_API_KEY와 process.env.GEMINI_API_KEY 존재 여부만 반환  │
+│ (값은 노출하지 않음)                                                         │
+│                                                                              │
+│ src/app/page.tsx                                                             │
+│ - 마운트 시 /api/env-keys 호출                                               │
+│ - env 키가 있으면 해당 필드의 키 입력을 요구하지 않음 (설정 패널 자동 닫기   │
+│ 조건에 반영)                                                                 │
+│ - analyzeComments와 fetchComments 호출 시 env 키가 있는 필드는 빈 문자열     │
+│ 전달 → 서버에서 env 폴백 사용                                                │
+│                                                                              │
+│ 변경 파일                                                                    │
+│                                                                              │
+│ ┌───────────────────────────────────────────────┬──────┐                     │
+│ │                     파일                      │ 유형 │                     │
+│ ├───────────────────────────────────────────────┼──────┤                     │
+│ │ .env.example                                  │ 신규 │                     │
+│ ├───────────────────────────────────────────────┼──────┤                     │
+│ │ src/app/api/analyze/route.ts (+test)          │ 수정 │                     │
+│ ├───────────────────────────────────────────────┼──────┤                     │
+│ │ src/app/api/youtube/comments/route.ts (+test) │ 수정 │                     │
+│ ├───────────────────────────────────────────────┼──────┤                     │
+│ │ src/app/api/env-keys/route.ts (+test)         │ 신규 │                     │
+│ ├───────────────────────────────────────────────┼──────┤                     │
+│ │ src/app/page.tsx (+test)                      │ 수정 │                     │
+│ └───────────────────────────────────────────────┴──────┘                     │
+│                                                                              │
+│ 검증                                                                         │
+│                                                                              │
+│ - .env.local에 키 없이 → 기존대로 UI에서 키 입력 필요                        │
+│ - .env.local에 키 설정 → 설정 패널 없이 바로 분석 가능                       │
+│ - npm run test 통과                                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+● I'll start by reading the existing files that need to be modified.
+
+● Searched for 2 patterns, read 6 files (ctrl+o to expand)
+
+● Let me read the existing test files to understand the patterns used.
+
+● Read 3 files (ctrl+o to expand)
+
+● Now let's start implementing. Task 1: .env.example.
+
+● Write(.env.example)
+  ⎿  Wrote 2 lines to .env.example
+      1 YOUTUBE_API_KEY=
+      2 GEMINI_API_KEY=
+
+● Task 2: Analyze route - tests first, then implementation.
+
+● First, add env fallback tests to the analyze route test file.
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 45 lines, removed 1 line
+      111        expect(body.error).toBe("Missing comments or apiKey");
+      112      });
+      113  
+      114 -    it("apiKey 없음 → 400", async () => {                     
+      114 +    it("apiKey 없음 + env 없음 → 400", async () => {          
+      115 +      delete process.env.GEMINI_API_KEY;                      
+      116        const res = await POST(makeRequest({ comments: sampleCom
+           ments }));
+      117        expect(res.status).toBe(400);
+      118  
+     ...
+      129      });
+      130    });
+      131  
+      132 +  describe("env 폴백", () => {                                
+      133 +    it("apiKey 미전달 + GEMINI_API_KEY env 설정 → env 키로 요 
+          +청", async () => {                                            
+      134 +      process.env.GEMINI_API_KEY = "env-gemini-key";          
+      135 +      const mockFetch = vi.fn().mockResolvedValue(makeGeminiRe
+          +sponse(JSON.stringify(validReport)));                         
+      136 +      vi.stubGlobal("fetch", mockFetch);                      
+      137 +                                                              
+      138 +      const res = await POST(makeRequest({ comments: sampleCom
+          +ments }));                                                    
+      139 +      expect(res.status).toBe(200);                           
+      140 +                                                              
+      141 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      142 +      expect(calledUrl).toContain("key=env-gemini-key");      
+      143 +    });                                                       
+      144 +                                                              
+      145 +    it("apiKey 빈 문자열 + GEMINI_API_KEY env 설정 → env 키로 
+          +요청", async () => {                                          
+      146 +      process.env.GEMINI_API_KEY = "env-gemini-key";          
+      147 +      const mockFetch = vi.fn().mockResolvedValue(makeGeminiRe
+          +sponse(JSON.stringify(validReport)));                         
+      148 +      vi.stubGlobal("fetch", mockFetch);                      
+      149 +                                                              
+      150 +      const res = await POST(makeRequest({ comments: sampleCom
+          +ments, apiKey: "" }));                                        
+      151 +      expect(res.status).toBe(200);                           
+      152 +                                                              
+      153 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      154 +      expect(calledUrl).toContain("key=env-gemini-key");      
+      155 +    });                                                       
+      156 +                                                              
+      157 +    it("apiKey 전달 시 env보다 우선", async () => {           
+      158 +      process.env.GEMINI_API_KEY = "env-gemini-key";          
+      159 +      const mockFetch = vi.fn().mockResolvedValue(makeGeminiRe
+          +sponse(JSON.stringify(validReport)));                         
+      160 +      vi.stubGlobal("fetch", mockFetch);                      
+      161 +                                                              
+      162 +      const res = await POST(makeRequest({ comments: sampleCom
+          +ments, apiKey: "user-key" }));                                
+      163 +      expect(res.status).toBe(200);                           
+      164 +                                                              
+      165 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      166 +      expect(calledUrl).toContain("key=user-key");            
+      167 +      expect(calledUrl).not.toContain("key=env-gemini-key");  
+      168 +    });                                                       
+      169 +                                                              
+      170 +    afterEach(() => {                                         
+      171 +      delete process.env.GEMINI_API_KEY;                      
+      172 +    });                                                       
+      173 +  });                                                         
+      174 +                                                              
+      175    describe("Gemini API 에러", () => {
+      176      it("API key not valid → 401 + isApiKeyError: true", async 
+           () => {
+      177        vi.stubGlobal(
+
+● Now implement the env fallback in the analyze route.
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 2 lines, removed 1 line
+      32      apiKey?: string;
+      33    };
+      34  
+      35 -  const { comments, apiKey } = body;                           
+      35 +  const { comments, apiKey: bodyKey } = body;                  
+      36 +  const apiKey = bodyKey || process.env.GEMINI_API_KEY;        
+      37  
+      38    if (!comments || !apiKey) {
+      39      return Response.json(
+
+● Task 3: YouTube comments route.
+
+● Add env fallback tests to the youtube comments route test file.
+
+● Update(src\app\api\youtube\comments\route.test.ts)
+  ⎿  Added 45 lines, removed 1 line
+      146        expect(body.error).toBe("Missing videoId or apiKey");
+      147      });
+      148  
+      149 -    it("apiKey 없으면 400", async () => {                     
+      149 +    it("apiKey 없으면 + env 없으면 400", async () => {        
+      150 +      delete process.env.YOUTUBE_API_KEY;                     
+      151        const res = await GET(makeRequest({ videoId: VALID_VIDEO
+           _ID }));
+      152        expect(res.status).toBe(400);
+      153  
+     ...
+      156      });
+      157    });
+      158  
+      159 +  describe("env 폴백", () => {                                
+      160 +    afterEach(() => {                                         
+      161 +      delete process.env.YOUTUBE_API_KEY;                     
+      162 +    });                                                       
+      163 +                                                              
+      164 +    it("apiKey 미전달 + YOUTUBE_API_KEY env 설정 → env 키로 요
+          +청", async () => {                                            
+      165 +      process.env.YOUTUBE_API_KEY = "env-yt-key";             
+      166 +      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeR
+          +esponse([], 0));                                              
+      167 +      vi.stubGlobal("fetch", mockFetch);                      
+      168 +                                                              
+      169 +      const res = await GET(makeRequest({ videoId: VALID_VIDEO
+          +_ID }));                                                      
+      170 +      expect(res.status).toBe(200);                           
+      171 +                                                              
+      172 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      173 +      expect(calledUrl).toContain("key=env-yt-key");          
+      174 +    });                                                       
+      175 +                                                              
+      176 +    it("apiKey 빈 문자열 + YOUTUBE_API_KEY env 설정 → env 키로
+          + 요청", async () => {                                         
+      177 +      process.env.YOUTUBE_API_KEY = "env-yt-key";             
+      178 +      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeR
+          +esponse([], 0));                                              
+      179 +      vi.stubGlobal("fetch", mockFetch);                      
+      180 +                                                              
+      181 +      const res = await GET(makeRequest({ videoId: VALID_VIDEO
+          +_ID, apiKey: "" }));                                          
+      182 +      expect(res.status).toBe(200);                           
+      183 +                                                              
+      184 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      185 +      expect(calledUrl).toContain("key=env-yt-key");          
+      186 +    });                                                       
+      187 +                                                              
+      188 +    it("apiKey 전달 시 env보다 우선", async () => {           
+      189 +      process.env.YOUTUBE_API_KEY = "env-yt-key";             
+      190 +      const mockFetch = vi.fn().mockResolvedValue(makeYouTubeR
+          +esponse([], 0));                                              
+      191 +      vi.stubGlobal("fetch", mockFetch);                      
+      192 +                                                              
+      193 +      const res = await GET(makeRequest({ videoId: VALID_VIDEO
+          +_ID, apiKey: "user-key" }));                                  
+      194 +      expect(res.status).toBe(200);                           
+      195 +                                                              
+      196 +      const calledUrl = mockFetch.mock.calls[0][0] as string; 
+      197 +      expect(calledUrl).toContain("key=user-key");            
+      198 +      expect(calledUrl).not.toContain("key=env-yt-key");      
+      199 +    });                                                       
+      200 +  });                                                         
+      201 +                                                              
+      202    describe("YouTube API 에러", () => {
+      203      it("commentsDisabled → 403", async () => {
+      204        vi.stubGlobal(
+
+● Now implement the env fallback in the youtube comments route.
+
+● Update(src\app\api\youtube\comments\route.ts)
+  ⎿  Added 1 line, removed 1 line
+       4  export async function GET(request: Request): Promise<Response> 
+          {
+       5    const { searchParams } = new URL(request.url);
+       6    const videoId = searchParams.get("videoId");
+       7 -  const apiKey = searchParams.get("apiKey");                   
+       7 +  const apiKey = searchParams.get("apiKey") || process.env.YOUT
+         +UBE_API_KEY;                                                   
+       8    const maxResults = searchParams.get("maxResults") ?? "100";
+       9  
+      10    if (!videoId || !apiKey) {
+
+● Task 4: Create env-keys API route with tests.
+
+● Test first:
+
+● Write(src\app\api\env-keys\route.test.ts)
+  ⎿  Wrote 60 lines to src\app\api\env-keys\route.test.ts
+       1 import { describe, it, expect, afterEach } from "vitest";
+       2 import { GET } from "./route";
+       3 
+       4 function makeRequest(): Request {
+       5   return new Request("http://localhost:3000/api/env-keys");
+       6 }
+       7 
+       8 describe("GET /api/env-keys", () => {
+       9   afterEach(() => {
+      10     delete process.env.YOUTUBE_API_KEY;
+     … +50 lines (ctrl+o to expand)
+
+● Now the implementation:
+
+● Write(src\app\api\env-keys\route.ts)
+  ⎿  Wrote 6 lines to src\app\api\env-keys\route.ts
+      1 export async function GET(): Promise<Response> {
+      2   return Response.json({
+      3     youtube: !!process.env.YOUTUBE_API_KEY,
+      4     gemini: !!process.env.GEMINI_API_KEY,
+      5   });
+      6 }
+
+● Task 5: Update page.tsx with env key awareness.
+
+● First, add tests to page.test.tsx. I need to mock the fetch for /api/env-keys.
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 16 lines
+      27  const mockAnalyzeComments = vi.mocked(analyzeComments);
+      28  const mockGetApiKeys = vi.mocked(getApiKeys);
+      29  
+      30 +// Helper to mock global fetch for env-keys endpoint           
+      31 +function mockEnvKeys(envKeys: { youtube: boolean; gemini: boole
+         +an }) {                                                        
+      32 +  vi.stubGlobal(                                               
+      33 +    "fetch",                                                   
+      34 +    vi.fn().mockImplementation((url: string) => {              
+      35 +      if (url === "/api/env-keys") {                           
+      36 +        return Promise.resolve({                               
+      37 +          ok: true,                                            
+      38 +          json: () => Promise.resolve(envKeys),                
+      39 +        });                                                    
+      40 +      }                                                        
+      41 +      return Promise.reject(new Error(`Unmocked fetch: ${url}`)
+         +);                                                             
+      42 +    })                                                         
+      43 +  );                                                           
+      44 +}                                                              
+      45 +                                                               
+      46  const mockReport = {
+      47    summary: "전반적으로 긍정적",
+      48    sentiment: { positive: 70, neutral: 20, negative: 10 },
+
+● Now add the env-keys related tests at the end of the test file.
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 72 lines
+      242        screen.getByText("시청자 반응 리포트를 생성합니다.", { e
+           xact: false })
+      243      ).toBeDefined();
+      244    });
+      245 +                                                              
+      246 +  describe("env 키 폴백", () => {                             
+      247 +    it("env 키가 모두 있으면 localStorage 키 없이도 설정 패널 
+          +이 닫힌다", async () => {                                     
+      248 +      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: ""
+          + });                                                          
+      249 +      mockEnvKeys({ youtube: true, gemini: true });           
+      250 +                                                              
+      251 +      render(<Home />);                                       
+      252 +                                                              
+      253 +      await waitFor(() => {                                   
+      254 +        expect(screen.queryByText("YouTube API 키")).toBeNull(
+          +);                                                            
+      255 +      });                                                     
+      256 +    });                                                       
+      257 +                                                              
+      258 +    it("env 키가 모두 있으면 빈 키로 분석 가능", async () => {
+      259 +      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: ""
+          + });                                                          
+      260 +      mockEnvKeys({ youtube: true, gemini: true });           
+      261 +      mockFetchComments.mockResolvedValue({                   
+      262 +        comments: [                                           
+      263 +          { id: "1", text: "좋아요", author: "A", likeCount: 5
+          +, publishedAt: "2024-01-01T00:00:00Z" },                      
+      264 +        ],                                                    
+      265 +        totalResults: 100,                                    
+      266 +        videoId: "dQw4w9WgXcQ",                               
+      267 +      });                                                     
+      268 +      mockAnalyzeComments.mockResolvedValue(mockReport);      
+      269 +                                                              
+      270 +      render(<Home />);                                       
+      271 +                                                              
+      272 +      await waitFor(() => {                                   
+      273 +        expect(screen.queryByText("YouTube API 키")).toBeNull(
+          +);                                                            
+      274 +      });                                                     
+      275 +                                                              
+      276 +      const input = screen.getByPlaceholderText("YouTube 영상 
+          +URL을 붙여넣으세요");                                         
+      277 +      fireEvent.change(input, {                               
+      278 +        target: { value: "https://www.youtube.com/watch?v=dQw4
+          +w9WgXcQ" },                                                   
+      279 +      });                                                     
+      280 +      fireEvent.click(screen.getByText("분석"));              
+      281 +                                                              
+      282 +      await waitFor(() => {                                   
+      283 +        expect(screen.getByText("전반적으로 긍정적")).toBeDefi
+          +ned();                                                        
+      284 +      });                                                     
+      285 +                                                              
+      286 +      // env 키가 있는 필드는 빈 문자열로 전달                
+      287 +      expect(mockFetchComments).toHaveBeenCalledWith("dQw4w9Wg
+          +XcQ", "");                                                    
+      288 +      expect(mockAnalyzeComments).toHaveBeenCalledWith(       
+      289 +        expect.any(Array),                                    
+      290 +        ""                                                    
+      291 +      );                                                      
+      292 +    });                                                       
+      293 +                                                              
+      294 +    it("env에 youtube만 있고 gemini는 localStorage에서 → 혼합 
+          +사용", async () => {                                          
+      295 +      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "l
+          +ocal-gemini" });                                              
+      296 +      mockEnvKeys({ youtube: true, gemini: false });          
+      297 +                                                              
+      298 +      render(<Home />);                                       
+      299 +                                                              
+      300 +      await waitFor(() => {                                   
+      301 +        expect(screen.queryByText("YouTube API 키")).toBeNull(
+          +);                                                            
+      302 +      });                                                     
+      303 +    });                                                       
+      304 +                                                              
+      305 +    it("env 키 없고 localStorage 키도 없으면 설정 패널 열림", 
+          +async () => {                                                 
+      306 +      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: ""
+          + });                                                          
+      307 +      mockEnvKeys({ youtube: false, gemini: false });         
+      308 +                                                              
+      309 +      render(<Home />);                                       
+      310 +                                                              
+      311 +      // 설정 패널이 열려 있어야 함                           
+      312 +      await waitFor(() => {                                   
+      313 +        expect(screen.getByText("YouTube API 키")).toBeDefined
+          +();                                                           
+      314 +      });                                                     
+      315 +    });                                                       
+      316 +  });                                                         
+      317  });
+
+● Now implement the env key logic in page.tsx.
+
+● Update(src\app\page.tsx)
+  ⎿  Added 17 lines, removed 3 lines
+      40  
+      41    const [savedKeys, setSavedKeys] = useState({ youtube: "", gem
+          ini: "" });
+      42    const [storageAvail, setStorageAvail] = useState(true);
+      43 +  const [envKeys, setEnvKeys] = useState({ youtube: false, gemi
+         +ni: false });                                                  
+      44  
+      45    const inputRef = useRef<HTMLInputElement>(null);
+      46  
+     ...
+      48      const keys = getApiKeys();
+      49      setSavedKeys(keys);
+      50      setStorageAvail(isStorageAvailable());
+      50 -    if (!keys.youtube || !keys.gemini) {                       
+      51 -      setSettingsOpen(true);                                   
+      52 -    }                                                          
+      51 +                                                               
+      52 +    fetch("/api/env-keys")                                     
+      53 +      .then((res) => (res.ok ? res.json() : { youtube: false, g
+         +emini: false }))                                               
+      54 +      .then((env: { youtube: boolean; gemini: boolean }) => {  
+      55 +        setEnvKeys(env);                                       
+      56 +        const ytReady = !!keys.youtube || env.youtube;         
+      57 +        const geminiReady = !!keys.gemini || env.gemini;       
+      58 +        if (!ytReady || !geminiReady) {                        
+      59 +          setSettingsOpen(true);                               
+      60 +        }                                                      
+      61 +      })                                                       
+      62 +      .catch(() => {                                           
+      63 +        if (!keys.youtube || !keys.gemini) {                   
+      64 +          setSettingsOpen(true);                               
+      65 +        }                                                      
+      66 +      });                                                      
+      67    }, []);
+      68  
+      69    const updateStep = (index: number, status: LoadingStep["statu
+          s"]) => {
+
+● Now update handleAnalyze to use env key awareness.
+
+● Update(src\app\page.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      84      }
+      85  
+      86      const keys = getApiKeys();
+      87 -    if (!keys.youtube || !keys.gemini) {                       
+      87 +    const ytReady = !!keys.youtube || envKeys.youtube;         
+      88 +    const geminiReady = !!keys.gemini || envKeys.gemini;       
+      89 +    if (!ytReady || !geminiReady) {                            
+      90        setInlineError("API 키를 먼저 설정해 주세요.");
+      91        setSettingsOpen(true);
+      92        return;
+
+● Now update the fetchComments and analyzeComments calls to pass empty string
+  when env key is available:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 5 lines, removed 2 lines
+      103      setInlineError(null);
+      104  
+      105      try {
+      106 +      const ytKey = envKeys.youtube ? "" : keys.youtube;      
+      107 +      const gemKey = envKeys.gemini ? "" : keys.gemini;       
+      108 +                                                              
+      109        const { comments, totalResults } = await fetchComments(
+      110          videoId,
+      108 -        keys.youtube                                          
+      111 +        ytKey                                                 
+      112        );
+      113  
+      114        if (comments.length === 0) {
+     ...
+      121        updateStep(0, "done");
+      122        updateStep(1, "active");
+      123  
+      121 -      const result = await analyzeComments(comments, keys.gemi
+          -ni);                                                          
+      124 +      const result = await analyzeComments(comments, gemKey); 
+      125  
+      126        // sentiment 정규화
+      127        const sum =
+
+● Task 6: Run all tests.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  Error: Exit code 1
+
+     > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+
+
+      RUN  v3.2.6 C:/prj/harness_framework
+
+      ✓ src/app/api/env-keys/route.test.ts (5 tests) 31ms
+      ✓ src/components/InsightCard.test.tsx (4 tests) 113ms
+     … +139 lines (ctrl+o to see all)
+
+● The existing test "API 키가 없으면 설정 패널이 열린다" is now async because
+  settingsOpen depends on the env-keys fetch. I need to update it.
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 6 lines, removed 3 lines
+      61      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" })
+          ;
+      62    });
+      63  
+      64 -  it("API 키가 없으면 설정 패널이 열린다", () => {             
+      64 +  it("API 키가 없으면 설정 패널이 열린다", async () => {       
+      65 +    mockEnvKeys({ youtube: false, gemini: false });            
+      66      render(<Home />);
+      66 -    expect(screen.getByText("YouTube API 키")).toBeDefined();  
+      67 -    expect(screen.getByText("Gemini API 키")).toBeDefined();   
+      67 +    await waitFor(() => {                                      
+      68 +      expect(screen.getByText("YouTube API 키")).toBeDefined();
+      69 +      expect(screen.getByText("Gemini API 키")).toBeDefined(); 
+      70 +    });                                                        
+      71    });
+      72  
+      73    it("API 키가 있으면 설정 패널이 닫힌다", () => {
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  Error: Exit code 1
+
+     > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+
+
+      RUN  v3.2.6 C:/prj/harness_framework
+
+      ✓ src/components/ReportHeader.test.tsx (2 tests) 52ms
+      ✓ src/components/SentimentChart.test.tsx (4 tests) 60ms
+     … +105 lines (ctrl+o to see all)
+
+● The afterEach inside the describe("env 폴백") blocks isn't imported. The
+  existing files import beforeEach but not afterEach from vitest. Let me fix
+  both files.
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -import { describe, it, expect, vi, beforeEach } from "vitest";  
+      1 +import { describe, it, expect, vi, beforeEach, afterEach } from 
+        +"vitest";                                                       
+      2  import { POST } from "./route";
+      3  
+      4  const VALID_API_KEY = "test-gemini-key-123";
+
+● Update(src\app\api\youtube\comments\route.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -import { describe, it, expect, vi, beforeEach } from "vitest";  
+      1 +import { describe, it, expect, vi, beforeEach, afterEach } from 
+        +"vitest";                                                       
+      2  import { GET } from "./route";
+      3  
+      4  const VALID_VIDEO_ID = "dQw4w9WgXcQ";
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +56 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● All 169 tests pass across 19 test files.
+
+● All done. Here's a summary of the changes:
+
+  New files:
+  - .env.example — template with YOUTUBE_API_KEY and GEMINI_API_KEY placeholders
+  - src/app/api/env-keys/route.ts — GET endpoint returning { youtube: boolean, 
+  gemini: boolean } indicating which env keys are set
+  - src/app/api/env-keys/route.test.ts — 5 tests for the new endpoint
+
+  Modified files:
+  - src/app/api/analyze/route.ts — apiKey now falls back to
+  process.env.GEMINI_API_KEY when not provided or empty
+  - src/app/api/analyze/route.test.ts — 3 new env fallback tests (env-only,
+  empty string fallback, user key priority)
+  - src/app/api/youtube/comments/route.ts — apiKey now falls back to
+  process.env.YOUTUBE_API_KEY when not provided or empty
+  - src/app/api/youtube/comments/route.test.ts — 3 new env fallback tests
+  - src/app/page.tsx — fetches /api/env-keys on mount; skips requiring manual
+  key input when env keys exist; passes empty string to services for env-backed
+  keys
+  - src/app/page.test.tsx — 4 new env fallback tests (settings panel auto-close,
+   analysis with env keys, mixed keys, no keys)
+
+  169 tests passing across all 19 test files.
+
+✻ Baked for 4m 58s

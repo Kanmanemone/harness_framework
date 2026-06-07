@@ -32,7 +32,8 @@ export async function POST(request: Request): Promise<Response> {
     apiKey?: string;
   };
 
-  const { comments, apiKey } = body;
+  const { comments, apiKey: bodyKey } = body;
+  const apiKey = bodyKey || process.env.GEMINI_API_KEY;
 
   if (!comments || !apiKey) {
     return Response.json(

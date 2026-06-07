@@ -40,6 +40,7 @@ export default function Home() {
 
   const [savedKeys, setSavedKeys] = useState({ youtube: "", gemini: "" });
   const [storageAvail, setStorageAvail] = useState(true);
+  const [envKeys, setEnvKeys] = useState({ youtube: false, gemini: false });
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,9 +48,22 @@ export default function Home() {
     const keys = getApiKeys();
     setSavedKeys(keys);
     setStorageAvail(isStorageAvailable());
-    if (!keys.youtube || !keys.gemini) {
-      setSettingsOpen(true);
-    }
+
+    fetch("/api/env-keys")
+      .then((res) => (res.ok ? res.json() : { youtube: false, gemini: false }))
+      .then((env: { youtube: boolean; gemini: boolean }) => {
+        setEnvKeys(env);
+        const ytReady = !!keys.youtube || env.youtube;
+        const geminiReady = !!keys.gemini || env.gemini;
+        if (!ytReady || !geminiReady) {
+          setSettingsOpen(true);
+        }
+      })
+      .catch(() => {
+        if (!keys.youtube || !keys.gemini) {
+          setSettingsOpen(true);
+        }
+      });
   }, []);
 
   const updateStep = (index: number, status: LoadingStep["status"]) => {
@@ -70,7 +84,9 @@ export default function Home() {
     }
 
     const keys = getApiKeys();
-    if (!keys.youtube || !keys.gemini) {
+    const ytReady = !!keys.youtube || envKeys.youtube;
+    const geminiReady = !!keys.gemini || envKeys.gemini;
+    if (!ytReady || !geminiReady) {
       setInlineError("API 키를 먼저 설정해 주세요.");
       setSettingsOpen(true);
       return;
@@ -87,9 +103,12 @@ export default function Home() {
     setInlineError(null);
 
     try {
+      const ytKey = envKeys.youtube ? "" : keys.youtube;
+      const gemKey = envKeys.gemini ? "" : keys.gemini;
+
       const { comments, totalResults } = await fetchComments(
         videoId,
-        keys.youtube
+        ytKey
       );
 
       if (comments.length === 0) {
@@ -102,7 +121,7 @@ export default function Home() {
       updateStep(0, "done");
       updateStep(1, "active");
 
-      const result = await analyzeComments(comments, keys.gemini);
+      const result = await analyzeComments(comments, gemKey);
 
       // sentiment 정규화
       const sum =

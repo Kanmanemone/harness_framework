@@ -27,6 +27,22 @@ const mockFetchComments = vi.mocked(fetchComments);
 const mockAnalyzeComments = vi.mocked(analyzeComments);
 const mockGetApiKeys = vi.mocked(getApiKeys);
 
+// Helper to mock global fetch for env-keys endpoint
+function mockEnvKeys(envKeys: { youtube: boolean; gemini: boolean }) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/env-keys") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(envKeys),
+        });
+      }
+      return Promise.reject(new Error(`Unmocked fetch: ${url}`));
+    })
+  );
+}
+
 const mockReport = {
   summary: "전반적으로 긍정적",
   sentiment: { positive: 70, neutral: 20, negative: 10 },
@@ -45,10 +61,13 @@ describe("Home (page.tsx)", () => {
     mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
   });
 
-  it("API 키가 없으면 설정 패널이 열린다", () => {
+  it("API 키가 없으면 설정 패널이 열린다", async () => {
+    mockEnvKeys({ youtube: false, gemini: false });
     render(<Home />);
-    expect(screen.getByText("YouTube API 키")).toBeDefined();
-    expect(screen.getByText("Gemini API 키")).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText("YouTube API 키")).toBeDefined();
+      expect(screen.getByText("Gemini API 키")).toBeDefined();
+    });
   });
 
   it("API 키가 있으면 설정 패널이 닫힌다", () => {
@@ -225,5 +244,77 @@ describe("Home (page.tsx)", () => {
     expect(
       screen.getByText("시청자 반응 리포트를 생성합니다.", { exact: false })
     ).toBeDefined();
+  });
+
+  describe("env 키 폴백", () => {
+    it("env 키가 모두 있으면 localStorage 키 없이도 설정 패널이 닫힌다", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
+      mockEnvKeys({ youtube: true, gemini: true });
+
+      render(<Home />);
+
+      await waitFor(() => {
+        expect(screen.queryByText("YouTube API 키")).toBeNull();
+      });
+    });
+
+    it("env 키가 모두 있으면 빈 키로 분석 가능", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
+      mockEnvKeys({ youtube: true, gemini: true });
+      mockFetchComments.mockResolvedValue({
+        comments: [
+          { id: "1", text: "좋아요", author: "A", likeCount: 5, publishedAt: "2024-01-01T00:00:00Z" },
+        ],
+        totalResults: 100,
+        videoId: "dQw4w9WgXcQ",
+      });
+      mockAnalyzeComments.mockResolvedValue(mockReport);
+
+      render(<Home />);
+
+      await waitFor(() => {
+        expect(screen.queryByText("YouTube API 키")).toBeNull();
+      });
+
+      const input = screen.getByPlaceholderText("YouTube 영상 URL을 붙여넣으세요");
+      fireEvent.change(input, {
+        target: { value: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+      });
+      fireEvent.click(screen.getByText("분석"));
+
+      await waitFor(() => {
+        expect(screen.getByText("전반적으로 긍정적")).toBeDefined();
+      });
+
+      // env 키가 있는 필드는 빈 문자열로 전달
+      expect(mockFetchComments).toHaveBeenCalledWith("dQw4w9WgXcQ", "");
+      expect(mockAnalyzeComments).toHaveBeenCalledWith(
+        expect.any(Array),
+        ""
+      );
+    });
+
+    it("env에 youtube만 있고 gemini는 localStorage에서 → 혼합 사용", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "local-gemini" });
+      mockEnvKeys({ youtube: true, gemini: false });
+
+      render(<Home />);
+
+      await waitFor(() => {
+        expect(screen.queryByText("YouTube API 키")).toBeNull();
+      });
+    });
+
+    it("env 키 없고 localStorage 키도 없으면 설정 패널 열림", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
+      mockEnvKeys({ youtube: false, gemini: false });
+
+      render(<Home />);
+
+      // 설정 패널이 열려 있어야 함
+      await waitFor(() => {
+        expect(screen.getByText("YouTube API 키")).toBeDefined();
+      });
+    });
   });
 });
