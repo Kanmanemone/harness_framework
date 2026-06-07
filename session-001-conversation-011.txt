@@ -1,0 +1,511 @@
+
+❯ 프로젝트 루트에 있는 .env.example에 api key를 입력했어. 이제 이걸 가지고  
+  너가 무사히 실행까지 시켜 봐. 중간에 일어나는 에러같은 걸 전부 알아서     
+  잡아서 진행해.                                                            
+
+● .env.example은 Next.js가 자동으로 읽지 않습니다. .env.local로 복사해야 합니다.
+
+● Bash(cp /c/prj/harness_framework/.env.example
+      /c/prj/harness_framework/.env.local)
+  ⎿  Done
+
+● Bash(cd /c/prj/harness_framework && npm run build 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 build
+     > next build
+     … +22 lines (ctrl+o to expand)
+
+● 빌드 성공. .env.local도 정상 인식됨. 이제 개발 서버를 실행합니다.
+
+● Bash(cd /c/prj/harness_framework && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bcdf983
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+
+● Task Output(non-blocking) bcdf983
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +9 lines (ctrl+o to expand)
+
+● 서버가 포트 3001에서 실행 중. env-keys API가 정상 작동하는지 확인합니다.
+
+● Bash(curl -s http://localhost:3001/api/env-keys 2>&1)
+  ⎿  {
+       "youtube": true,
+       "gemini": true
+     }
+
+● env 키 둘 다 true 반환. YouTube 댓글 가져오기도 테스트합니다.
+
+● Bash(curl -s "http://localhost:3001/api/youtube/comments?videoId=dQw4w9WgXcQ&m
+      axResults=5" 2>&1)
+  ⎿  {
+       "comments": [
+         {
+     … +27 lines (ctrl+o to expand)
+
+● YouTube API 키가 env 폴백으로 정상 작동합니다. 이제 분석 API도 테스트합니다.
+
+● Bash(curl -s -X POST http://localhost:3001/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "summary": "두 개의 댓글 중 하나는 영상 제작에 대한 긍정적인 평가를
+     나타내며, 다른 하나는 영상의 음질에 대한 개선점을 지적합니다.",
+     … +27 lines (ctrl+o to expand)
+
+● Gemini API도 env 폴백으로 정상 작동합니다. 두 API 모두 키 입력 없이
+  .env.local의 키로 동작하는 것을 확인했습니다.
+
+  개발 서버를 정리하겠습니다.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && npm run dev 2>&1 · stopped
+
+● 모든 것이 정상 작동합니다. 요약:
+
+  1. .env.example → .env.local로 복사
+  2. npm run build 성공 (.env.local 인식 확인)
+  3. GET /api/env-keys → {"youtube":true,"gemini":true} 반환
+  4. GET /api/youtube/comments?videoId=... → API 키 없이 env 폴백으로 댓글 정상
+  조회
+  5. POST /api/analyze → API 키 없이 env 폴백으로 Gemini 분석 정상 완료
+
+  이제 UI에서 API 키를 입력하지 않아도 .env.local에 키가 있으면 설정 패널이
+  자동으로 닫히고 바로 분석을 시작할 수 있습니다.
+
+✻ Crunched for 2m 39s
+
+❯ "분석 결과를 처리하지 못했습니다. 다시 시도해 주세요."라고 뜨는데...      
+  정말로 될 때 까지 진행해줘. "https://www.youtube.com/watch?v=wtNdUANBIl0" 
+   이 영상을 기준으로 테스트해봐.                                           
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● "Failed to parse analysis result"가 원인입니다. Gemini 응답에서 JSON 파싱이
+  실패하는 것. 실제 API를 호출해서 원인을 확인하겠습니다.
+
+● Bash(cd /c/prj/harness_framework && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bf0a12c
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +10 lines (ctrl+o to expand)
+
+● 서버가 3002에서 동작 중. 먼저 해당 영상의 댓글을 가져와보겠습니다.
+
+● Bash(curl -s "http://localhost:3002/api/youtube/comments?videoId=wtNdUANBIl0&m
+      axResults=100" > /tmp/comments_response.json 2>&1 && wc -c
+      /tmp/comments_response.json)
+  ⎿  5183 /tmp/comments_response.json
+
+● Read 1 file (ctrl+o to expand)
+
+● Bash(node -e "
+      const fs = require('fs');…)
+  ⎿  Error: Exit code 1
+     node:fs:441
+         return binding.readFileUtf8(path, stringToFlags(options.flag));
+                        ^
+
+     Error: ENOENT: no such file or directory, open 
+     'C:\tmp\comments_response.json'
+         at Object.readFileSync (node:fs:441:20)
+         at [eval]:3:28
+         at runScriptInThisContext (node:internal/vm:219:10)
+         at node:internal/process/execution:451:12
+
+     … +34 lines (ctrl+o to see all)
+
+● Windows path issue. Let me use a proper path.
+
+● Bash(curl -s "http://localhost:3002/api/youtube/comments?videoId=wtNdUANBIl0&m
+      axResults=100" > C:/prj/harness_framework/tmp_comments.json 2>&1)
+  ⎿  (No output)
+
+● Read 1 file (ctrl+o to expand)
+
+● 댓글 14개 정상 수집. 이제 이 댓글로 분석 API를 직접 호출해서 Gemini 응답
+  원문을 확인하겠습니다.
+
+● Bash(node -e "
+      const fs = require('fs');…)
+  ⎿  Body written, size: 3129
+
+● Bash(curl -s -X POST http://localhost:3002/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "error": "Failed to parse analysis result"
+     }
+
+● 재현됐습니다. Gemini 응답 원문을 봐야 합니다. 디버깅을 위해 route에 로그를
+  추가하겠습니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 3 lines, removed 1 line
+      132      const jsonString = extractJson(rawText);
+      133      const report = JSON.parse(jsonString);
+      134      return Response.json(report);
+      135 -  } catch {                                                   
+      135 +  } catch (parseErr) {                                        
+      136 +    console.error("[Gemini Parse Error] rawText:", rawText);  
+      137 +    console.error("[Gemini Parse Error]", parseErr);          
+      138      return Response.json(
+      139        { error: "Failed to parse analysis result" },
+      140        { status: 500 }
+
+● Bash(curl -s -X POST http://localhost:3002/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  <!DOCTYPE html><html lang="ko"><head><meta charSet="utf-8"/><meta name
+     ="viewport" content="width=device-width, initial-scale=1"/><link rel="
+     stylesheet" href="/_next/static/css/app/layout.css?v=1780826303929" da
+     … +178 lines (ctrl+o to expand)
+
+● 핫 리로드 후 라우트가 초기화된 것 같습니다. 서버를 재시작하겠습니다.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && npm run dev 2>&1 · stopped
+
+● Bash(cd /c/prj/harness_framework && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bc5fd6d
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +3 lines (ctrl+o to expand)
+
+● Task Output(non-blocking) bc5fd6d
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +9 lines (ctrl+o to expand)
+
+● Bash(curl -s -X POST http://localhost:3003/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "error": "Failed to parse analysis result"
+     }
+
+● 에러 재현. 서버 로그를 확인합니다.
+
+● Task Output(non-blocking) bc5fd6d
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +23 lines (ctrl+o to expand)
+
+● 원인을 찾았습니다. Gemini가 JSON을 잘려서 반환하고 있습니다. "sentiment":
+  이후로 잘려서 }가 없으므로 파싱 실패. GEMINI_MAX_TOKENS가 너무 낮게 설정되어
+  있을 가능성이 큽니다.
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● GEMINI_MAX_TOKENS가 2048로 설정되어 있고, gemini-2.5-flash는 "thinking"
+  모델이라 thinking 토큰이 max_tokens를 잡아먹어서 실제 출력이 잘리는 것입니다.
+  프롬프트도 확인해보겠습니다.
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● 문제가 명확합니다. gemini-2.5-flash는 thinking 모델이므로 maxOutputTokens: 
+  2048에 thinking 토큰까지 포함됩니다. 그래서 실제 응답 JSON이 잘립니다.
+
+  두 가지 수정:
+  1. GEMINI_MAX_TOKENS를 8192로 증가
+  2. thinking budget을 별도로 설정하여 출력 토큰이 충분히 확보되도록 함
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      1  import type { Comment } from "@/types";
+      2  
+      3  export const GEMINI_MODEL = "gemini-2.5-flash";
+      4 -export const GEMINI_MAX_TOKENS = 2048;                          
+      4 +export const GEMINI_MAX_TOKENS = 8192;                          
+      5  export const YOUTUBE_TIMEOUT_MS = 15000;
+      6 -export const GEMINI_TIMEOUT_MS = 30000;                         
+      6 +export const GEMINI_TIMEOUT_MS = 60000;                         
+      7  
+      8  /**
+      9   * 댓글 목록을 Gemini 분석용 프롬프트로 조립한다.
+
+● 또한 Gemini 2.5 flash의 thinking budget을 제어해야 합니다. generationConfig에
+  thinkingConfig를 추가하겠습니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 4 lines, removed 1 line
+      62        },
+      63        body: JSON.stringify({
+      64          contents: [{ parts: [{ text: prompt }] }],
+      65 -        generationConfig: { maxOutputTokens: GEMINI_MAX_TOKENS 
+         -},                                                             
+      65 +        generationConfig: {                                    
+      66 +          maxOutputTokens: GEMINI_MAX_TOKENS,                  
+      67 +          thinkingConfig: { thinkingBudget: 1024 },            
+      68 +        },                                                     
+      69        }),
+      70        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      71      });
+
+● 또 하나 문제: Gemini 2.5 flash의 thinking 모델은 응답 구조가 다릅니다.
+  thinking part가 먼저 오고 그 다음에 text part가 올 수 있습니다. 응답에서
+  텍스트 추출 로직도 확인해야 합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● parts[0].text만 사용하는데, thinking 모델은 parts에 thought part와 text part가
+   섞여 올 수 있습니다. 모든 text part를 합쳐야 합니다.
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 7 lines, removed 2 lines
+      126    }
+      127  
+      128    const data = await res.json() as {
+      129 -    candidates: { content: { parts: { text: string }[] } }[]; 
+      129 +    candidates: { content: { parts: { text?: string; thought?:
+          + boolean }[] } }[];                                           
+      130    };
+      131  
+      132 -  const rawText = data.candidates[0].content.parts[0].text;   
+      132 +  // Gemini 2.5 thinking 모델은 thought part와 text part가 분 
+          +리됨.                                                         
+      133 +  // thought가 아닌 text part만 합쳐서 사용한다.              
+      134 +  const rawText = data.candidates[0].content.parts            
+      135 +    .filter((p) => !p.thought && p.text)                      
+      136 +    .map((p) => p.text)                                       
+      137 +    .join("");                                                
+      138  
+      139    try {
+      140      const jsonString = extractJson(rawText);
+
+● 이제 테스트해보겠습니다.
+
+● Bash(curl -s -X POST http://localhost:3003/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "error": "AI service temporarily unavailable"
+     }
+
+● Task Output(non-blocking) bc5fd6d
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +23 lines (ctrl+o to expand)
+
+● Gemini가 일시적으로 503 (high demand)을 반환했습니다. 다시 시도합니다.
+
+● Bash(curl -s -X POST http://localhost:3003/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "error": "AI service temporarily unavailable"
+     }
+
+● 계속 503. gemini-2.5-flash에 부하가 걸린 상태. gemini-2.0-flash로 변경해서
+  시도해보겠습니다. 이건 thinking 모델이 아니라 안정적입니다.
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import type { Comment } from "@/types";
+      2  
+      3 -export const GEMINI_MODEL = "gemini-2.5-flash";                 
+      3 +export const GEMINI_MODEL = "gemini-2.0-flash";                 
+      4  export const GEMINI_MAX_TOKENS = 8192;
+      5  export const YOUTUBE_TIMEOUT_MS = 15000;
+      6  export const GEMINI_TIMEOUT_MS = 60000;
+
+● Bash(curl -s -X POST http://localhost:3003/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  <!DOCTYPE html><html lang="ko"><head><meta charSet="utf-8"/><meta name
+     ="viewport" content="width=device-width, initial-scale=1"/><link rel="
+     stylesheet" href="/_next/static/css/app/layout.css?v=1780826443588" da
+     … +178 lines (ctrl+o to expand)
+
+● 404 again - Next.js dev server is returning HTML for the API route after hot
+  reload. The dev server needs a full restart.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && npm run dev 2>&1 · stopped
+
+● Bash(cd /c/prj/harness_framework && rm -rf .next)
+  ⎿  Done
+
+● Bash(cd /c/prj/harness_framework && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bd52af8
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +9 lines (ctrl+o to expand)
+
+● Bash(sleep 5 && curl -s -X POST http://localhost:3004/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "error": "Gemini API quota exceeded"
+     }
+
+● Task Output(non-blocking) bd52af8
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +21 lines (ctrl+o to expand)
+
+● gemini-2.0-flash는 이 API 키에서 quota가 0입니다 (free tier 모델에서 차단됨).
+  이 키는 gemini-2.5-flash에만 할당량이 있는 것 같습니다. 다시
+  gemini-2.5-flash로 돌리고 잠시 후 재시도하겠습니다.
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import type { Comment } from "@/types";
+      2  
+      3 -export const GEMINI_MODEL = "gemini-2.0-flash";                 
+      3 +export const GEMINI_MODEL = "gemini-2.5-flash";                 
+      4  export const GEMINI_MAX_TOKENS = 8192;
+      5  export const YOUTUBE_TIMEOUT_MS = 15000;
+      6  export const GEMINI_TIMEOUT_MS = 60000;
+
+● 503 에러가 "high demand"였으니 잠깐 대기 후 재시도합니다.
+
+● Bash(sleep 15 && curl -s -X POST http://localhost:3004/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  <!DOCTYPE html><html><head><meta charSet="utf-8" data-next-head=""/><m
+     eta name="viewport" content="width=device-width" data-next-head=""/><s
+     tyle data-next-hide-fouc="true">body{display:none}</style><noscript da
+     … +92 lines (ctrl+o to expand)
+
+● Dev server webpack cache is corrupted. Full restart needed.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && npm run dev 2>&1 · stopped
+
+● Bash(cd /c/prj/harness_framework && rm -rf .next && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bb24e9f
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +9 lines (ctrl+o to expand)
+
+● Bash(sleep 10 && curl -s -X POST http://localhost:3005/api/analyze \
+        -H "Content-Type: application/json" \…)
+  ⎿  {
+       "summary": "전반적으로 영상 내용에 대한 매우 긍정적인 평가가 주를 이
+     루며, 특히 강의 수준과 통찰력, 문제 해결 방향 제시 등에 대해 높은 만족
+     … +31 lines (ctrl+o to expand)
+
+● 분석이 완전히 성공했습니다. 이제 테스트를 돌려서 상수 변경으로 깨진 것이
+  있는지 확인합니다.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  Error: Exit code 1
+
+     > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+
+
+      RUN  v3.2.6 C:/prj/harness_framework
+
+
+
+     … +285 lines (ctrl+o to see all)
+
+● OOM - the dev server is eating up memory. Let me stop it first and then run
+  tests.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && rm -rf .next && npm run dev 2>&1 ·
+     stopped
+
+❯ 방금은 로컬 저장소 부족으로 작동이 중단되었어. 하던 거 다시 진행해줘. 
+
+● dev 서버를 끄고 테스트부터 돌리겠습니다. 상수 변경(GEMINI_MAX_TOKENS,
+  GEMINI_TIMEOUT_MS)으로 깨진 테스트가 있을 것입니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● 테스트 기대값을 수정합니다.
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      17      });
+      18  
+      19      it("GEMINI_MAX_TOKENS", () => {
+      20 -      expect(GEMINI_MAX_TOKENS).toBe(2048);                    
+      20 +      expect(GEMINI_MAX_TOKENS).toBe(8192);                    
+      21      });
+      22  
+      23      it("YOUTUBE_TIMEOUT_MS", () => {
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      25      });
+      26  
+      27      it("GEMINI_TIMEOUT_MS", () => {
+      28 -      expect(GEMINI_TIMEOUT_MS).toBe(30000);                   
+      28 +      expect(GEMINI_TIMEOUT_MS).toBe(60000);                   
+      29      });
+      30    });
+      31  
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +68 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 19개 파일, 169개 테스트 전부 통과. 이제 E2E 확인을 위해 dev 서버를 띄우고 해당
+   영상으로 분석을 돌리겠습니다.
+
+● Bash(cd /c/prj/harness_framework && rm -rf .next && npm run dev 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+● Task Output(non-blocking) bdc4a56
+  ⎿
+     > youtube-comment-analyzer@0.1.0 dev
+     > next dev
+     … +7 lines (ctrl+o to expand)
+
+● Bash(sleep 5 && curl -s "http://localhost:3000/api/youtube/comments?videoId=wt
+      NdUANBIl0&maxResults=100" -o C:/prj/harness_framework/tmp_comments.json &&
+       curl -s -X P…)
+  ⎿  {
+       "summary": "이 영상에 대한 댓글들은 전반적으로 긍정적인 반응을
+     보였으
+     며, 특히 강의의 내용 정리와 전달 방식에 대해 높은 만족도를 나타냈습니
+     … +34 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 완벽하게 동작합니다. dev 서버를 정리합니다.
+
+● Stop Task
+  ⎿  cd /c/prj/harness_framework && rm -rf .next && npm run dev 2>&1 ·
+     stopped
+
+● 전부 완료되었습니다. 정리하면:
+
+  문제 원인: gemini-2.5-flash는 thinking 모델이라 maxOutputTokens: 2048에
+  thinking 토큰까지 포함되어 실제 JSON 출력이 잘렸고, 또한 응답 구조가 thought
+  part와 text part로 분리되어 parts[0].text만 읽으면 thinking 내용만 나올 수
+  있었습니다.
+
+  수정 내용 (3가지):
+
+  1. src/lib/constants.ts — GEMINI_MAX_TOKENS 2048→8192, GEMINI_TIMEOUT_MS
+  30000→60000으로 증가
+  2. src/app/api/analyze/route.ts — thinkingConfig: { thinkingBudget: 1024 }
+  추가 + thought part를 필터링하여 text part만 합치도록 응답 파싱 수정
+  3. src/lib/constants.test.ts — 상수 기대값 업데이트
+
+  검증: 169개 테스트 전부 통과 + wtNdUANBIl0 영상 실제 분석 성공 확인.
+
+✻ Worked for 2m 28s

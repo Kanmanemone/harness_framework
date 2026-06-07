@@ -17,7 +17,7 @@ describe("constants", () => {
     });
 
     it("GEMINI_MAX_TOKENS", () => {
-      expect(GEMINI_MAX_TOKENS).toBe(2048);
+      expect(GEMINI_MAX_TOKENS).toBe(8192);
     });
 
     it("YOUTUBE_TIMEOUT_MS", () => {
@@ -25,7 +25,7 @@ describe("constants", () => {
     });
 
     it("GEMINI_TIMEOUT_MS", () => {
-      expect(GEMINI_TIMEOUT_MS).toBe(30000);
+      expect(GEMINI_TIMEOUT_MS).toBe(60000);
     });
   });
 

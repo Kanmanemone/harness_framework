@@ -62,7 +62,10 @@ export async function POST(request: Request): Promise<Response> {
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: GEMINI_MAX_TOKENS },
+        generationConfig: {
+          maxOutputTokens: GEMINI_MAX_TOKENS,
+          thinkingConfig: { thinkingBudget: 1024 },
+        },
       }),
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
@@ -123,16 +126,23 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const data = await res.json() as {
-    candidates: { content: { parts: { text: string }[] } }[];
+    candidates: { content: { parts: { text?: string; thought?: boolean }[] } }[];
   };
 
-  const rawText = data.candidates[0].content.parts[0].text;
+  // Gemini 2.5 thinking 모델은 thought part와 text part가 분리됨.
+  // thought가 아닌 text part만 합쳐서 사용한다.
+  const rawText = data.candidates[0].content.parts
+    .filter((p) => !p.thought && p.text)
+    .map((p) => p.text)
+    .join("");
 
   try {
     const jsonString = extractJson(rawText);
     const report = JSON.parse(jsonString);
     return Response.json(report);
-  } catch {
+  } catch (parseErr) {
+    console.error("[Gemini Parse Error] rawText:", rawText);
+    console.error("[Gemini Parse Error]", parseErr);
     return Response.json(
       { error: "Failed to parse analysis result" },
       { status: 500 }

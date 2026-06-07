@@ -1,9 +1,9 @@
 import type { Comment } from "@/types";
 
 export const GEMINI_MODEL = "gemini-2.5-flash";
-export const GEMINI_MAX_TOKENS = 2048;
+export const GEMINI_MAX_TOKENS = 8192;
 export const YOUTUBE_TIMEOUT_MS = 15000;
-export const GEMINI_TIMEOUT_MS = 30000;
+export const GEMINI_TIMEOUT_MS = 60000;
 
 /**
  * 댓글 목록을 Gemini 분석용 프롬프트로 조립한다.
