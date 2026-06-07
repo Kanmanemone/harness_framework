@@ -17,15 +17,23 @@ vi.mock("@/lib/storage", () => ({
   saveApiKeys: vi.fn(),
   deleteApiKey: vi.fn(),
   isStorageAvailable: vi.fn(() => true),
+  getHistory: vi.fn(() => []),
+  addHistoryEntry: vi.fn(),
+  deleteHistoryEntry: vi.fn(),
+  clearHistory: vi.fn(),
 }));
 
 import { fetchComments } from "@/services/youtubeService";
 import { analyzeComments } from "@/services/analyzeService";
-import { getApiKeys } from "@/lib/storage";
+import { getApiKeys, getHistory, addHistoryEntry, deleteHistoryEntry, clearHistory } from "@/lib/storage";
 
 const mockFetchComments = vi.mocked(fetchComments);
 const mockAnalyzeComments = vi.mocked(analyzeComments);
 const mockGetApiKeys = vi.mocked(getApiKeys);
+const mockGetHistory = vi.mocked(getHistory);
+const mockAddHistoryEntry = vi.mocked(addHistoryEntry);
+const mockDeleteHistoryEntry = vi.mocked(deleteHistoryEntry);
+const mockClearHistory = vi.mocked(clearHistory);
 
 // Helper to mock global fetch for env-keys endpoint
 function mockEnvKeys(envKeys: { youtube: boolean; gemini: boolean }) {
@@ -137,6 +145,7 @@ describe("Home (page.tsx)", () => {
       ],
       totalResults: 100,
       videoId: "dQw4w9WgXcQ",
+      videoTitle: "테스트 영상 제목",
     });
     mockAnalyzeComments.mockResolvedValue(mockReport);
 
@@ -213,6 +222,7 @@ describe("Home (page.tsx)", () => {
       ],
       totalResults: 100,
       videoId: "dQw4w9WgXcQ",
+      videoTitle: "테스트 영상 제목",
     });
     mockAnalyzeComments.mockResolvedValueOnce(mockReport);
 
@@ -315,6 +325,93 @@ describe("Home (page.tsx)", () => {
       await waitFor(() => {
         expect(screen.getByText("YouTube API 키")).toBeDefined();
       });
+    });
+  });
+
+  describe("사이드바 기록 통합", () => {
+    const historyEntry = {
+      id: "entry-1",
+      videoId: "dQw4w9WgXcQ",
+      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      title: "전반적으로 긍정적",
+      analyzedAt: new Date().toISOString(),
+      report: mockReport,
+      commentsMeta: { analyzed: 1, total: 100 },
+    };
+
+    it("분석 성공 후 addHistoryEntry가 호출된다", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
+      mockFetchComments.mockResolvedValue({
+        comments: [
+          { id: "1", text: "좋아요", author: "A", likeCount: 5, publishedAt: "2024-01-01T00:00:00Z" },
+        ],
+        totalResults: 100,
+        videoId: "dQw4w9WgXcQ",
+      });
+      mockAnalyzeComments.mockResolvedValue(mockReport);
+
+      render(<Home />);
+
+      const input = screen.getByPlaceholderText("YouTube 영상 URL을 붙여넣으세요");
+      fireEvent.change(input, {
+        target: { value: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+      });
+      fireEvent.click(screen.getByText("분석"));
+
+      await waitFor(() => {
+        expect(screen.getByText("전반적으로 긍정적")).toBeDefined();
+      });
+
+      expect(mockAddHistoryEntry).toHaveBeenCalledTimes(1);
+      const savedEntry = mockAddHistoryEntry.mock.calls[0][0];
+      expect(savedEntry.videoId).toBe("dQw4w9WgXcQ");
+      expect(savedEntry.report).toEqual(mockReport);
+    });
+
+    it("초기 로드 시 사이드바에 기록을 표시한다", () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
+      mockGetHistory.mockReturnValue([historyEntry]);
+
+      render(<Home />);
+
+      expect(screen.getByText("전반적으로 긍정적")).toBeDefined();
+      expect(screen.getByText("분석 기록")).toBeDefined();
+    });
+
+    it("기록 클릭 시 과거 리포트가 복원된다", async () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
+      mockGetHistory.mockReturnValue([historyEntry]);
+
+      render(<Home />);
+
+      fireEvent.click(screen.getByText("전반적으로 긍정적"));
+
+      await waitFor(() => {
+        expect(screen.getByText("긍정 70%")).toBeDefined();
+      });
+    });
+
+    it("기록 삭제 시 deleteHistoryEntry가 호출된다", () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
+      mockGetHistory.mockReturnValue([historyEntry]);
+
+      render(<Home />);
+
+      const deleteBtn = screen.getByLabelText("삭제");
+      fireEvent.click(deleteBtn);
+
+      expect(mockDeleteHistoryEntry).toHaveBeenCalledWith("entry-1");
+    });
+
+    it("전체 삭제 시 clearHistory가 호출된다", () => {
+      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
+      mockGetHistory.mockReturnValue([historyEntry]);
+
+      render(<Home />);
+
+      fireEvent.click(screen.getByText("전체 삭제"));
+
+      expect(mockClearHistory).toHaveBeenCalled();
     });
   });
 });

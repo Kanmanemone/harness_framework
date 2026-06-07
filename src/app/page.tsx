@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { AppPhase, AnalysisReport, LoadingStep } from "@/types";
+import type { AppPhase, AnalysisReport, LoadingStep, HistoryEntry } from "@/types";
 import { extractVideoId } from "@/lib/youtube";
 import {
   getApiKeys,
   saveApiKeys,
   deleteApiKey,
   isStorageAvailable,
+  getHistory,
+  addHistoryEntry,
+  deleteHistoryEntry,
+  clearHistory,
 } from "@/lib/storage";
 import { mapErrorMessage, isApiKeyError } from "@/lib/constants";
 import { fetchComments } from "@/services/youtubeService";
@@ -18,6 +22,7 @@ import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import ErrorState from "@/components/ErrorState";
 import ReportView from "@/components/ReportView";
+import Sidebar from "@/components/Sidebar";
 
 const INITIAL_LOADING_STEPS: LoadingStep[] = [
   { label: "댓글을 수집하고 있습니다...", status: "pending" },
@@ -41,6 +46,8 @@ export default function Home() {
   const [savedKeys, setSavedKeys] = useState({ youtube: "", gemini: "" });
   const [storageAvail, setStorageAvail] = useState(true);
   const [envKeys, setEnvKeys] = useState({ youtube: false, gemini: false });
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,6 +55,7 @@ export default function Home() {
     const keys = getApiKeys();
     setSavedKeys(keys);
     setStorageAvail(isStorageAvailable());
+    setHistory(getHistory());
 
     fetch("/api/env-keys")
       .then((res) => (res.ok ? res.json() : { youtube: false, gemini: false }))
@@ -106,7 +114,7 @@ export default function Home() {
       const ytKey = envKeys.youtube ? "" : keys.youtube;
       const gemKey = envKeys.gemini ? "" : keys.gemini;
 
-      const { comments, totalResults } = await fetchComments(
+      const { comments, totalResults, videoTitle } = await fetchComments(
         videoId,
         ytKey
       );
@@ -145,6 +153,20 @@ export default function Home() {
 
       // brief delay not needed — just mark done
       updateStep(2, "done");
+
+      const entry: HistoryEntry = {
+        id: crypto.randomUUID(),
+        videoId,
+        url: trimmedUrl,
+        title: videoTitle || result.summary.slice(0, 80),
+        analyzedAt: new Date().toISOString(),
+        report: result,
+        commentsMeta: { analyzed: comments.length, total: totalResults },
+      };
+      addHistoryEntry(entry);
+      setHistory(getHistory());
+      setActiveHistoryId(entry.id);
+
       setPhase("report");
     } catch (err) {
       const message =
@@ -158,6 +180,32 @@ export default function Home() {
         setSettingsOpen(true);
       }
     }
+  };
+
+  const handleSelectHistory = (entry: HistoryEntry) => {
+    setReport(entry.report);
+    setCommentsMeta(entry.commentsMeta);
+    setUrl(entry.url);
+    setPhase("report");
+    setActiveHistoryId(entry.id);
+    setError(null);
+    setInlineError(null);
+  };
+
+  const handleDeleteHistory = (id: string) => {
+    deleteHistoryEntry(id);
+    setHistory(getHistory());
+    if (activeHistoryId === id) {
+      handleReset();
+      setActiveHistoryId(null);
+    }
+  };
+
+  const handleClearHistory = () => {
+    clearHistory();
+    setHistory([]);
+    handleReset();
+    setActiveHistoryId(null);
   };
 
   const handleRetry = () => {
@@ -190,7 +238,15 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-neutral-950">
+    <div className="min-h-screen bg-neutral-950 flex">
+      <Sidebar
+        history={history}
+        activeId={activeHistoryId}
+        onSelect={handleSelectHistory}
+        onDelete={handleDeleteHistory}
+        onClearAll={handleClearHistory}
+      />
+      <main className="flex-1 min-w-0">
       <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
@@ -260,6 +316,7 @@ export default function Home() {
           />
         )}
       </div>
-    </main>
+      </main>
+    </div>
   );
 }

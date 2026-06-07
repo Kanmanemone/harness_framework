@@ -22,6 +22,8 @@ export interface YouTubeCommentsResponse {
   totalResults: number;
   /** 영상 ID */
   videoId: string;
+  /** 영상 제목 */
+  videoTitle: string;
 }
 
 // 분석 결과
@@ -81,6 +83,24 @@ export interface ApiKeys {
   youtube: string;
   /** Gemini API 키 */
   gemini: string;
+}
+
+/** 분석 기록 항목 */
+export interface HistoryEntry {
+  /** 고유 ID */
+  id: string;
+  /** YouTube 영상 ID */
+  videoId: string;
+  /** 사용자가 입력한 원본 URL */
+  url: string;
+  /** 표시용 제목 (summary 앞 80자) */
+  title: string;
+  /** 분석 완료 시각 (ISO 8601) */
+  analyzedAt: string;
+  /** 분석 리포트 */
+  report: AnalysisReport;
+  /** 분석 시점의 댓글 메타 */
+  commentsMeta: { analyzed: number; total: number };
 }
 
 /** API 에러 응답 */

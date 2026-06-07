@@ -1,0 +1,942 @@
+
+❯ 왼쪽에 사이드바를 두고, 영상 별로 목록을 생성하고 싶어. 영상을 요청할     
+  때마다 사이드바에 결과 기록이 쌓이고, 목록 아이템을 클릭해서 예전 기록을  
+  참조할 수 있는 거지.                                                      
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Explore(Explore codebase for sidebar plan)
+  ⎿  Done (23 tool uses · 55.1k tokens · 52s)
+  (ctrl+o to expand)
+
+● Plan(Design sidebar history plan)
+  ⎿  Done (9 tool uses · 44.8k tokens · 1m 20s)
+  (ctrl+o to expand)
+
+● Read 1 file (ctrl+o to expand)
+
+● Now let me write the final plan file.
+
+● Updated plan
+  ⎿  Error writing file
+
+● Read 1 file (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭─────────────────────────────────────────────────────────────────────────╮
+     │ 사이드바 분석 기록 기능 구현 계획                                       │
+     │                                                                         │
+     │ Context                                                                 │
+     │                                                                         │
+     │ 현재 앱은 단일 컬럼 레이아웃(max-w-2xl mx-auto)으로, 분석 결과가 페이지 │
+     │  새로고침 시 사라진다. 왼쪽에 사이드바를 추가하여 영상별 분석 기록을    │
+     │ localStorage에 저장하고, 과거 기록을 클릭해 다시 볼 수 있게 한다.       │
+     │                                                                         │
+     │ 변경 요약                                                               │
+     │                                                                         │
+     │ 1. 타입 추가 — src/types/index.ts                                       │
+     │                                                                         │
+     │ export interface HistoryEntry {                                         │
+     │   id: string;                                                           │
+     │   videoId: string;                                                      │
+     │   url: string;                                                          │
+     │   title: string;            // report.summary 앞 80자                   │
+     │   analyzedAt: string;        // ISO 8601                                │
+     │   report: AnalysisReport;                                               │
+     │   commentsMeta: { analyzed: number; total: number };                    │
+     │ }                                                                       │
+     │                                                                         │
+     │ 2. 스토리지 확장 — src/lib/storage.ts                                   │
+     │                                                                         │
+     │ 기존 try-catch 패턴 그대로 4개 함수 추가:                               │
+     │                                                                         │
+     │ ┌──────────────────────────────┬─────────────────────────────────────┐  │
+     │ │             함수             │                설명                 │  │
+     │ ├──────────────────────────────┼─────────────────────────────────────┤  │
+     │ │ getHistory(): HistoryEntry[] │ localStorage에서 기록 로드 (최신순) │  │
+     │ ├──────────────────────────────┼─────────────────────────────────────┤  │
+     │ │ addHistoryEntry(entry): void │ 맨 앞에 추가, 최대 50개 제한        │  │
+     │ ├──────────────────────────────┼─────────────────────────────────────┤  │
+     │ │ deleteHistoryEntry(id): void │ ID로 삭제                           │  │
+     │ ├──────────────────────────────┼─────────────────────────────────────┤  │
+     │ │ clearHistory(): void         │ 전체 삭제                           │  │
+     │ └──────────────────────────────┴─────────────────────────────────────┘  │
+     │                                                                         │
+     │ 3. 새 컴포넌트 — src/components/Sidebar.tsx                             │
+     │                                                                         │
+     │ Props:                                                                  │
+     │   history: HistoryEntry[]                                               │
+     │   activeId: string | null                                               │
+     │   onSelect: (entry: HistoryEntry) => void                               │
+     │   onDelete: (id: string) => void                                        │
+     │   onClearAll: () => void                                                │
+     │                                                                         │
+     │ - 데스크톱 (md+): w-64 shrink-0 고정 사이드바, 항상 표시                │
+     │ - 모바일 (<md): 헤더에 토글 버튼 → 오버레이 드로어                      │
+     │ - 빈 상태: "아직 분석 기록이 없습니다"                                  │
+     │ - 각 항목: summary 앞부분 + 상대 시간 표시, 활성 항목 하이라이트        │
+     │ - "전체 삭제" 버튼                                                      │
+     │                                                                         │
+     │ 4. 레이아웃 변경 — src/app/page.tsx                                     │
+     │                                                                         │
+     │ Before:                                                                 │
+     │ <main class="min-h-screen bg-neutral-950">                              │
+     │   <div class="max-w-2xl mx-auto ...">                                   │
+     │                                                                         │
+     │ After:                                                                  │
+     │ <div class="min-h-screen bg-neutral-950 flex">                          │
+     │   <Sidebar ... />               <!-- 왼쪽 사이드바 -->                  │
+     │   <main class="flex-1 min-w-0">                                         │
+     │     <div class="max-w-2xl mx-auto ...">                                 │
+     │                                                                         │
+     │ 5. Home 상태 변경 — src/app/page.tsx                                    │
+     │                                                                         │
+     │ 새 state:                                                               │
+     │ - history: HistoryEntry[]                                               │
+     │ - activeHistoryId: string | null                                        │
+     │ - sidebarOpen: boolean (모바일 토글용)                                  │
+     │                                                                         │
+     │ 새 핸들러:                                                              │
+     │ - handleSelectHistory(entry) — 과거 기록 복원 (report, commentsMeta,    │
+     │ url, phase="report")                                                    │
+     │ - handleDeleteHistory(id) — 기록 삭제                                   │
+     │ - handleClearHistory() — 전체 삭제                                      │
+     │                                                                         │
+     │ handleAnalyze 수정 — 분석 성공 후 addHistoryEntry() 호출, history state │
+     │  갱신                                                                   │
+     │                                                                         │
+     │ 구현 순서 (TDD)                                                         │
+     │                                                                         │
+     │ ┌──────┬─────────────────────────────────┬───────────────────────────── │
+     │ ────┐                                                                   │
+     │ │ 단계 │              파일               │              유형            │
+     │     │                                                                   │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 1    │ src/types/index.ts              │ 수정 — HistoryEntry 추가     │
+     │     │                                                                   │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 2    │ src/lib/storage.test.ts         │ 수정 — history 함수 테스트   │
+     │ 추가 │                                                                  │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 3    │ src/lib/storage.ts              │ 수정 — history 함수 구현     │
+     │     │                                                                   │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 4    │ src/components/Sidebar.test.tsx │ 신규 — Sidebar 테스트        │
+     │     │                                                                   │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 5    │ src/components/Sidebar.tsx      │ 신규 — Sidebar 구현          │
+     │     │                                                                   │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 6    │ src/app/page.test.tsx           │ 수정 — history 통합 테스트   │
+     │ 추가 │                                                                  │
+     │ ├──────┼─────────────────────────────────┼───────────────────────────── │
+     │ ────┤                                                                   │
+     │ │ 7    │ src/app/page.tsx                │ 수정 — 레이아웃 + 상태 +     │
+     │ 핸들러 │                                                                │
+     │ └──────┴─────────────────────────────────┴───────────────────────────── │
+     │ ────┘                                                                   │
+     │                                                                         │
+     │ 검증                                                                    │
+     │                                                                         │
+     │ - npm run test 전체 통과                                                │
+     │ - npm run build 성공                                                    │
+     │ - dev 서버에서 영상 분석 → 사이드바에 기록 추가 확인                    │
+     │ - 페이지 새로고침 → 기록 유지 확인                                      │
+     │ - 기록 클릭 → 과거 리포트 복원 확인                                     │
+     │ - 기록 삭제 / 전체 삭제 동작 확인                                       │
+     ╰─────────────────────────────────────────────────────────────────────────╯
+
+❯ 방금 plan에 대해 "clear context and auto-accept edits (shift+tab)" 수행
+
+ ▐▛███▜▌   Claude Code v2.1.50
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    C:\prj\harness_framework
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read src\components\Sidebar.tsx (88 lines)
+  ⎿  Read src\components\Sidebar.test.tsx (93 lines)
+  ⎿  Read src\lib\storage.ts (119 lines)
+  ⎿  Read src\lib\storage.test.ts (223 lines)
+  ⎿  Read src\types\index.ts (111 lines)
+  ⎿  Plan file referenced (~\.claude\plans\elegant-mixing-muffin.md)
+
+● Let me continue with the sidebar implementation. First, I'll run the tests to
+  verify the Sidebar component and storage changes.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1 | tail -40)
+  ⎿  [Gemini API Error] {
+       status: 429,
+       errorStatus: 'RESOURCE_EXHAUSTED',
+     … +38 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● All 190 tests pass, including the Sidebar and storage tests. Now I need to
+  update page.tsx with the sidebar layout and history logic. Let me read the
+  current page.tsx first.
+
+● Read 2 files (ctrl+o to expand)
+
+● I'm in plan mode. Let me read the existing plan and update it to reflect
+  current progress.
+
+● Read 1 file (ctrl+o to expand)
+
+● The plan is the same task — continuing sidebar implementation. Steps 1-5 are
+  complete (types, storage, Sidebar component + tests, all 190 tests passing).
+  Now I need to do steps 6-7: update page.test.tsx and page.tsx. Let me update
+  the plan to reflect progress and the remaining work.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● The plan is updated with progress and detailed remaining steps. Steps 1-5 are
+  complete (190 tests passing), steps 6-7 remain.
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~\.claude\plans\elegant-mixing-muffin.md · /plan to 
+     edit
+     사이드바 분석 기록 기능 구현 계획
+
+     Context
+
+     현재 앱은 단일 컬럼 레이아웃(max-w-2xl mx-auto)으로, 분석 결과가
+     페이지 새로고침 시 사라진다. 왼쪽에 사이드바를 추가하여 영상별 분석
+     기록을 localStorage에 저장하고, 과거 기록을 클릭해 다시 볼 수 있게
+     한다.
+
+     변경 요약
+
+     1. 타입 추가 — src/types/index.ts
+
+     export interface HistoryEntry {
+       id: string;
+       videoId: string;
+       url: string;
+       title: string;            // report.summary 앞 80자
+       analyzedAt: string;        // ISO 8601
+       report: AnalysisReport;
+       commentsMeta: { analyzed: number; total: number };
+     }
+
+     2. 스토리지 확장 — src/lib/storage.ts
+
+     기존 try-catch 패턴 그대로 4개 함수 추가:
+
+     ┌──────────────────────────────┬─────────────────────────────────────┐
+     │             함수             │                설명                 │
+     ├──────────────────────────────┼─────────────────────────────────────┤
+     │ getHistory(): HistoryEntry[] │ localStorage에서 기록 로드 (최신순) │
+     ├──────────────────────────────┼─────────────────────────────────────┤
+     │ addHistoryEntry(entry): void │ 맨 앞에 추가, 최대 50개 제한        │
+     ├──────────────────────────────┼─────────────────────────────────────┤
+     │ deleteHistoryEntry(id): void │ ID로 삭제                           │
+     ├──────────────────────────────┼─────────────────────────────────────┤
+     │ clearHistory(): void         │ 전체 삭제                           │
+     └──────────────────────────────┴─────────────────────────────────────┘
+
+     3. 새 컴포넌트 — src/components/Sidebar.tsx
+
+     Props:
+       history: HistoryEntry[]
+       activeId: string | null
+       onSelect: (entry: HistoryEntry) => void
+       onDelete: (id: string) => void
+       onClearAll: () => void
+
+     - 데스크톱 (md+): w-64 shrink-0 고정 사이드바, 항상 표시
+     - 모바일 (<md): 헤더에 토글 버튼 → 오버레이 드로어
+     - 빈 상태: "아직 분석 기록이 없습니다"
+     - 각 항목: summary 앞부분 + 상대 시간 표시, 활성 항목 하이라이트
+     - "전체 삭제" 버튼
+
+     4. 레이아웃 변경 — src/app/page.tsx
+
+     Before:
+     <main class="min-h-screen bg-neutral-950">
+       <div class="max-w-2xl mx-auto ...">
+
+     After:
+     <div class="min-h-screen bg-neutral-950 flex">
+       <Sidebar ... />               <!-- 왼쪽 사이드바 -->
+       <main class="flex-1 min-w-0">
+         <div class="max-w-2xl mx-auto ...">
+
+     5. Home 상태 변경 — src/app/page.tsx
+
+     새 state:
+     - history: HistoryEntry[]
+     - activeHistoryId: string | null
+     - sidebarOpen: boolean (모바일 토글용)
+
+     새 핸들러:
+     - handleSelectHistory(entry) — 과거 기록 복원 (report, commentsMeta,
+     url, phase="report")
+     - handleDeleteHistory(id) — 기록 삭제
+     - handleClearHistory() — 전체 삭제
+
+     handleAnalyze 수정 — 분석 성공 후 addHistoryEntry() 호출, history
+     state 갱신
+
+     구현 순서 (TDD)
+
+     ┌──────┬──────────────────────────────────────────────────┬─────────┐
+     │ 단계 │                       파일                       │  상태   │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 1    │ src/types/index.ts — HistoryEntry 추가           │ ✅ 완료 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 2    │ src/lib/storage.test.ts — history 함수 테스트    │ ✅ 완료 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 3    │ src/lib/storage.ts — history 함수 구현           │ ✅ 완료 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 4    │ src/components/Sidebar.test.tsx — Sidebar 테스트 │ ✅ 완료 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 5    │ src/components/Sidebar.tsx — Sidebar 구현        │ ✅ 완료 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 6    │ src/app/page.test.tsx — history 통합 테스트 추가 │ 🔲 다음 │
+     ├──────┼──────────────────────────────────────────────────┼─────────┤
+     │ 7    │ src/app/page.tsx — 레이아웃 + 상태 + 핸들러      │ 🔲 다음 │
+     └──────┴──────────────────────────────────────────────────┴─────────┘
+
+     단계 6: page.test.tsx 추가 테스트
+
+     storage mock에 getHistory, addHistoryEntry, deleteHistoryEntry,
+     clearHistory 추가. 새 테스트:
+
+     - 분석 성공 후 addHistoryEntry가 호출된다
+     - 사이드바에 기록이 표시된다 (mock getHistory 반환값)
+     - 기록 클릭 시 과거 리포트가 복원된다
+     - 기록 삭제 시 deleteHistoryEntry가 호출된다
+     - 전체 삭제 시 clearHistory가 호출된다
+
+     단계 7: page.tsx 변경
+
+     Imports 추가:
+     - import Sidebar from "@/components/Sidebar"
+     - import { getHistory, addHistoryEntry, deleteHistoryEntry, 
+     clearHistory } from "@/lib/storage" (기존 import에 추가)
+     - import type { HistoryEntry } from "@/types"
+
+     새 state:
+     - const [history, setHistory] = useState<HistoryEntry[]>([])
+     - const [activeHistoryId, setActiveHistoryId] = useState<string | 
+     null>(null)
+
+     useEffect에 추가: setHistory(getHistory())
+
+     handleAnalyze 수정 — 분석 성공 시:
+     const entry: HistoryEntry = {
+       id: crypto.randomUUID(),
+       videoId, url: trimmedUrl,
+       title: result.summary.slice(0, 80),
+       analyzedAt: new Date().toISOString(),
+       report: result,
+       commentsMeta: { analyzed: comments.length, total: totalResults },
+     };
+     addHistoryEntry(entry);
+     setHistory(getHistory());
+     setActiveHistoryId(entry.id);
+
+     새 핸들러:
+     handleSelectHistory(entry) → setReport(entry.report),
+     setCommentsMeta(entry.commentsMeta),
+       setUrl(entry.url), setPhase("report"), setActiveHistoryId(entry.id)
+     handleDeleteHistory(id) → deleteHistoryEntry(id),
+     setHistory(getHistory()),
+       if activeHistoryId===id → handleReset()
+     handleClearHistory() → clearHistory(), setHistory([]), handleReset()
+
+     레이아웃 변경:
+     <div class="min-h-screen bg-neutral-950 flex">
+       <Sidebar history={history} activeId={activeHistoryId}
+         onSelect={handleSelectHistory} onDelete={handleDeleteHistory}
+         onClearAll={handleClearHistory} />
+       <main class="flex-1 min-w-0">
+         <div class="max-w-2xl mx-auto px-4 py-8 space-y-6">
+           ... 기존 콘텐츠 ...
+         </div>
+       </main>
+     </div>
+
+     검증
+
+     - npm run test 전체 통과
+     - npm run build 성공
+     - dev 서버에서 영상 분석 → 사이드바에 기록 추가 확인
+     - 페이지 새로고침 → 기록 유지 확인
+     - 기록 클릭 → 과거 리포트 복원 확인
+     - 기록 삭제 / 전체 삭제 동작 확인
+
+● Now let me implement. First, I'll mark the Sidebar task as complete and start
+  on the page.tsx tasks.
+
+● Step 6 (TDD): First, update page.test.tsx with history integration tests, then
+   implement in page.tsx.
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 4 lines
+      17    saveApiKeys: vi.fn(),
+      18    deleteApiKey: vi.fn(),
+      19    isStorageAvailable: vi.fn(() => true),
+      20 +  getHistory: vi.fn(() => []),                                 
+      21 +  addHistoryEntry: vi.fn(),                                    
+      22 +  deleteHistoryEntry: vi.fn(),                                 
+      23 +  clearHistory: vi.fn(),                                       
+      24  }));
+      25  
+      26  import { fetchComments } from "@/services/youtubeService";
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 5 lines, removed 1 line
+      25  
+      26  import { fetchComments } from "@/services/youtubeService";
+      27  import { analyzeComments } from "@/services/analyzeService";
+      28 -import { getApiKeys } from "@/lib/storage";                    
+      28 +import { getApiKeys, getHistory, addHistoryEntry, deleteHistory
+         +Entry, clearHistory } from "@/lib/storage";                    
+      29  
+      30  const mockFetchComments = vi.mocked(fetchComments);
+      31  const mockAnalyzeComments = vi.mocked(analyzeComments);
+      32  const mockGetApiKeys = vi.mocked(getApiKeys);
+      33 +const mockGetHistory = vi.mocked(getHistory);                  
+      34 +const mockAddHistoryEntry = vi.mocked(addHistoryEntry);        
+      35 +const mockDeleteHistoryEntry = vi.mocked(deleteHistoryEntry);  
+      36 +const mockClearHistory = vi.mocked(clearHistory);              
+      37  
+      38  // Helper to mock global fetch for env-keys endpoint
+      39  function mockEnvKeys(envKeys: { youtube: boolean; gemini: boole
+          an }) {
+
+● Now add the history integration tests at the end of the file:
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 87 lines
+      325        });
+      326      });
+      327    });
+      328 +                                                              
+      329 +  describe("사이드바 기록 통합", () => {                      
+      330 +    const historyEntry = {                                    
+      331 +      id: "entry-1",                                          
+      332 +      videoId: "dQw4w9WgXcQ",                                 
+      333 +      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",     
+      334 +      title: "전반적으로 긍정적",                             
+      335 +      analyzedAt: new Date().toISOString(),                   
+      336 +      report: mockReport,                                     
+      337 +      commentsMeta: { analyzed: 1, total: 100 },              
+      338 +    };                                                        
+      339 +                                                              
+      340 +    it("분석 성공 후 addHistoryEntry가 호출된다", async () => 
+          +{                                                             
+      341 +      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemi
+          +ni: "ant-key" });                                             
+      342 +      mockFetchComments.mockResolvedValue({                   
+      343 +        comments: [                                           
+      344 +          { id: "1", text: "좋아요", author: "A", likeCount: 5
+          +, publishedAt: "2024-01-01T00:00:00Z" },                      
+      345 +        ],                                                    
+      346 +        totalResults: 100,                                    
+      347 +        videoId: "dQw4w9WgXcQ",                               
+      348 +      });                                                     
+      349 +      mockAnalyzeComments.mockResolvedValue(mockReport);      
+      350 +                                                              
+      351 +      render(<Home />);                                       
+      352 +                                                              
+      353 +      const input = screen.getByPlaceholderText("YouTube 영상 
+          +URL을 붙여넣으세요");                                         
+      354 +      fireEvent.change(input, {                               
+      355 +        target: { value: "https://www.youtube.com/watch?v=dQw4
+          +w9WgXcQ" },                                                   
+      356 +      });                                                     
+      357 +      fireEvent.click(screen.getByText("분석"));              
+      358 +                                                              
+      359 +      await waitFor(() => {                                   
+      360 +        expect(screen.getByText("전반적으로 긍정적")).toBeDefi
+          +ned();                                                        
+      361 +      });                                                     
+      362 +                                                              
+      363 +      expect(mockAddHistoryEntry).toHaveBeenCalledTimes(1);   
+      364 +      const savedEntry = mockAddHistoryEntry.mock.calls[0][0];
+      365 +      expect(savedEntry.videoId).toBe("dQw4w9WgXcQ");         
+      366 +      expect(savedEntry.report).toEqual(mockReport);          
+      367 +    });                                                       
+      368 +                                                              
+      369 +    it("초기 로드 시 사이드바에 기록을 표시한다", () => {     
+      370 +      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemi
+          +ni: "ant-key" });                                             
+      371 +      mockGetHistory.mockReturnValue([historyEntry]);         
+      372 +                                                              
+      373 +      render(<Home />);                                       
+      374 +                                                              
+      375 +      expect(screen.getByText("전반적으로 긍정적")).toBeDefine
+          +d();                                                          
+      376 +      expect(screen.getByText("분석 기록")).toBeDefined();    
+      377 +    });                                                       
+      378 +                                                              
+      379 +    it("기록 클릭 시 과거 리포트가 복원된다", async () => {   
+      380 +      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemi
+          +ni: "ant-key" });                                             
+      381 +      mockGetHistory.mockReturnValue([historyEntry]);         
+      382 +                                                              
+      383 +      render(<Home />);                                       
+      384 +                                                              
+      385 +      fireEvent.click(screen.getByText("전반적으로 긍정적")); 
+      386 +                                                              
+      387 +      await waitFor(() => {                                   
+      388 +        expect(screen.getByText("70%")).toBeDefined();        
+      389 +      });                                                     
+      390 +    });                                                       
+      391 +                                                              
+      392 +    it("기록 삭제 시 deleteHistoryEntry가 호출된다", () => {  
+      393 +      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemi
+          +ni: "ant-key" });                                             
+      394 +      mockGetHistory.mockReturnValue([historyEntry]);         
+      395 +                                                              
+      396 +      render(<Home />);                                       
+      397 +                                                              
+      398 +      const deleteBtn = screen.getByLabelText("삭제");        
+      399 +      fireEvent.click(deleteBtn);                             
+      400 +                                                              
+      401 +      expect(mockDeleteHistoryEntry).toHaveBeenCalledWith("ent
+          +ry-1");                                                       
+      402 +    });                                                       
+      403 +                                                              
+      404 +    it("전체 삭제 시 clearHistory가 호출된다", () => {        
+      405 +      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemi
+          +ni: "ant-key" });                                             
+      406 +      mockGetHistory.mockReturnValue([historyEntry]);         
+      407 +                                                              
+      408 +      render(<Home />);                                       
+      409 +                                                              
+      410 +      fireEvent.click(screen.getByText("전체 삭제"));         
+      411 +                                                              
+      412 +      expect(mockClearHistory).toHaveBeenCalled();            
+      413 +    });                                                       
+      414 +  });                                                         
+      415  });
+
+● Now implement the changes in page.tsx:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  "use client";
+      2  
+      3  import { useState, useEffect, useRef } from "react";
+      4 -import type { AppPhase, AnalysisReport, LoadingStep } from "@/ty
+        -pes";                                                           
+      4 +import type { AppPhase, AnalysisReport, LoadingStep, HistoryEntr
+        +y } from "@/types";                                             
+      5  import { extractVideoId } from "@/lib/youtube";
+      6  import {
+      7    getApiKeys,
+
+● Update(src\app\page.tsx)
+  ⎿  Added 4 lines
+       8    saveApiKeys,
+       9    deleteApiKey,
+      10    isStorageAvailable,
+      11 +  getHistory,                                                  
+      12 +  addHistoryEntry,                                             
+      13 +  deleteHistoryEntry,                                          
+      14 +  clearHistory,                                                
+      15  } from "@/lib/storage";
+      16  import { mapErrorMessage, isApiKeyError } from "@/lib/constants
+          ";
+      17  import { fetchComments } from "@/services/youtubeService";
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line
+      22  import LoadingState from "@/components/LoadingState";
+      23  import ErrorState from "@/components/ErrorState";
+      24  import ReportView from "@/components/ReportView";
+      25 +import Sidebar from "@/components/Sidebar";                    
+      26  
+      27  const INITIAL_LOADING_STEPS: LoadingStep[] = [
+      28    { label: "댓글을 수집하고 있습니다...", status: "pending" },
+
+● Now add the history state variables:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 2 lines
+      46    const [savedKeys, setSavedKeys] = useState({ youtube: "", gem
+          ini: "" });
+      47    const [storageAvail, setStorageAvail] = useState(true);
+      48    const [envKeys, setEnvKeys] = useState({ youtube: false, gemi
+          ni: false });
+      49 +  const [history, setHistory] = useState<HistoryEntry[]>([]);  
+      50 +  const [activeHistoryId, setActiveHistoryId] = useState<string
+         + | null>(null);                                                
+      51  
+      52    const inputRef = useRef<HTMLInputElement>(null);
+      53  
+
+● Add setHistory(getHistory()) to the useEffect:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line
+      55      const keys = getApiKeys();
+      56      setSavedKeys(keys);
+      57      setStorageAvail(isStorageAvailable());
+      58 +    setHistory(getHistory());                                  
+      59  
+      60      fetch("/api/env-keys")
+      61        .then((res) => (res.ok ? res.json() : { youtube: false, g
+          emini: false }))
+
+● Now add history entry creation after successful analysis (right before
+  setPhase("report")):
+
+● Update(src\app\page.tsx)
+  ⎿  Added 14 lines
+      153  
+      154        // brief delay not needed — just mark done
+      155        updateStep(2, "done");
+      156 +                                                              
+      157 +      const entry: HistoryEntry = {                           
+      158 +        id: crypto.randomUUID(),                              
+      159 +        videoId,                                              
+      160 +        url: trimmedUrl,                                      
+      161 +        title: result.summary.slice(0, 80),                   
+      162 +        analyzedAt: new Date().toISOString(),                 
+      163 +        report: result,                                       
+      164 +        commentsMeta: { analyzed: comments.length, total: tota
+          +lResults },                                                   
+      165 +      };                                                      
+      166 +      addHistoryEntry(entry);                                 
+      167 +      setHistory(getHistory());                               
+      168 +      setActiveHistoryId(entry.id);                           
+      169 +                                                              
+      170        setPhase("report");
+      171      } catch (err) {
+      172        const message =
+
+● Now add the history handlers before handleRetry:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 26 lines
+      182      }
+      183    };
+      184  
+      185 +  const handleSelectHistory = (entry: HistoryEntry) => {      
+      186 +    setReport(entry.report);                                  
+      187 +    setCommentsMeta(entry.commentsMeta);                      
+      188 +    setUrl(entry.url);                                        
+      189 +    setPhase("report");                                       
+      190 +    setActiveHistoryId(entry.id);                             
+      191 +    setError(null);                                           
+      192 +    setInlineError(null);                                     
+      193 +  };                                                          
+      194 +                                                              
+      195 +  const handleDeleteHistory = (id: string) => {               
+      196 +    deleteHistoryEntry(id);                                   
+      197 +    setHistory(getHistory());                                 
+      198 +    if (activeHistoryId === id) {                             
+      199 +      handleReset();                                          
+      200 +      setActiveHistoryId(null);                               
+      201 +    }                                                         
+      202 +  };                                                          
+      203 +                                                              
+      204 +  const handleClearHistory = () => {                          
+      205 +    clearHistory();                                           
+      206 +    setHistory([]);                                           
+      207 +    handleReset();                                            
+      208 +    setActiveHistoryId(null);                                 
+      209 +  };                                                          
+      210 +                                                              
+      211    const handleRetry = () => {
+      212      handleAnalyze();
+      213    };
+
+● Now change the layout to flex with Sidebar:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 9 lines, removed 1 line
+      238    };
+      239  
+      240    return (
+      241 -    <main className="min-h-screen bg-neutral-950">            
+      241 +    <div className="min-h-screen bg-neutral-950 flex">        
+      242 +      <Sidebar                                                
+      243 +        history={history}                                     
+      244 +        activeId={activeHistoryId}                            
+      245 +        onSelect={handleSelectHistory}                        
+      246 +        onDelete={handleDeleteHistory}                        
+      247 +        onClearAll={handleClearHistory}                       
+      248 +      />                                                      
+      249 +      <main className="flex-1 min-w-0">                       
+      250        <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+      251          {/* Header */}
+      252          <div className="flex justify-between items-center">
+
+● Update(src\app\page.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      316            />
+      317          )}
+      318        </div>
+      319 -    </main>                                                   
+      319 +      </main>                                                 
+      320 +    </div>                                                    
+      321    );
+      322  }
+
+● There's a circular dependency issue — handleDeleteHistory calls handleReset
+  which is defined after it. Let me check the order.
+
+● Read 1 file (ctrl+o to expand)
+
+● handleReset is defined after the history handlers. In JavaScript, const
+  functions in the same scope can reference each other since they're all
+  closures — but at call time they'll be defined. Since these are event handlers
+   (not called during render), this is fine. Let me now run the tests.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1 | tail -50)
+  ⎿                    <div
+                         class="py-3 border-b border-neutral-800 last:borde
+     r-0"
+     … +33 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● One test fails — "기록 클릭 시 과거 리포트가 복원된다" is looking for "70%"
+  but the ReportView might render the sentiment percentage differently. Let me
+  check how ReportView displays the percentage.
+
+● Searched for 3 patterns (ctrl+o to expand)
+
+● It does render 70% as text. The issue might be that the sidebar's "전반적으로
+  긍정적" text matches as the sidebar item title, but clicking it doesn't work
+  as expected. Let me look more carefully at the test. The problem: clicking
+  "전반적으로 긍정적" in the sidebar triggers onSelect, which sets the report
+  state and phase to "report". But the test checks for "70%" which requires the
+  ReportView to render. Maybe the issue is that the text "전반적으로 긍정적"
+  appears in both the sidebar and the report summary, and clicking might be
+  ambiguous. Let me check the test output more closely — it shows waitFor
+  failing, meaning "70%" was never rendered.
+
+  The actual issue: clicking the sidebar entry text triggers handleSelectHistory
+   which should show the report. Let me verify the ReportView renders 70%.
+  Looking at the HTML output in the error, I can see <main> with report content
+  including "좋아요" and "다른 영상 분석하기" — so the report IS rendering. But
+  the SentimentChart uses {seg.value}% which would render 70%. Let me look at
+  SentimentChart more carefully.
+
+● Read 1 file (ctrl+o to expand)
+
+● It renders 긍정 70% not just 70%. Let me fix the test assertion.
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      385        fireEvent.click(screen.getByText("전반적으로 긍정적"));
+      386  
+      387        await waitFor(() => {
+      388 -        expect(screen.getByText("70%")).toBeDefined();        
+      388 +        expect(screen.getByText("긍정 70%")).toBeDefined();   
+      389        });
+      390      });
+      391  
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1 | tail -20)
+  ⎿   ✓ src/components/Sidebar.test.tsx (8 tests) 219ms
+      ✓ src/components/ReportHeader.test.tsx (2 tests) 250ms
+      ✓ src/components/ApiKeySettings.test.tsx (8 tests) 229ms
+     … +23 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● All 195 tests pass. Now let me run the build to verify.
+
+● Bash(cd /c/prj/harness_framework && npm run build 2>&1 | tail -30)
+  ⎿     Creating an optimized production build ...
+      ✓ Compiled successfully in 3.0s
+        Linting and checking validity of types ...
+     … +18 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● Build succeeds. All 195 tests pass and the build compiles cleanly.
+
+● Sidebar implementation is complete. Here's a summary of what was done:
+
+  Completed steps:
+
+  1. src/types/index.ts — Added HistoryEntry interface
+  2. src/lib/storage.ts — Added getHistory, addHistoryEntry, deleteHistoryEntry,
+   clearHistory functions with 24 tests
+  3. src/components/Sidebar.tsx — New sidebar component with relative time
+  display, active item highlighting, delete/clear-all buttons (8 tests)
+  4. src/app/page.tsx — Restructured layout to flex with <Sidebar> on the left,
+  added history/activeHistoryId state, history handlers (handleSelectHistory,
+  handleDeleteHistory, handleClearHistory), and auto-save on analysis success
+  5. src/app/page.test.tsx — Added 5 history integration tests
+
+  Results: 195 tests passing, production build successful.
+
+✻ Crunched for 9m 49s
+
+❯ 목록 아이템의 제목은 동영상 제목으로 해줘 
+
+● Currently the history entry title is set from result.summary.slice(0, 80). Let
+   me check what video title info is available from the YouTube API response.
+
+● Searched for 2 patterns (ctrl+o to expand)
+
+● The current API doesn't fetch video titles. I need to add that. Let me check
+  the YouTube comments route to see how to include the video title.
+
+● Read 2 files (ctrl+o to expand)
+
+● I need to add a video title fetch to the YouTube comments route. The YouTube
+  Data API videos endpoint with part=snippet returns the title. I'll add it to
+  the existing route so it returns the video title alongside comments. Let me
+  update the types, route, service, and page.tsx.
+
+● Read 1 file (ctrl+o to expand)
+
+● I'll add videoTitle to YouTubeCommentsResponse, then update the route to fetch
+   it, and update page.tsx to use it for the history entry title.
+
+● Update(src\types\index.ts)
+  ⎿  Added 2 lines
+      22    totalResults: number;
+      23    /** 영상 ID */
+      24    videoId: string;
+      25 +  /** 영상 제목 */                                             
+      26 +  videoTitle: string;                                          
+      27  }
+      28  
+      29  // 분석 결과
+
+● Now update the YouTube comments route to fetch the video title:
+
+● Update(src\app\api\youtube\comments\route.ts)
+  ⎿  Added 18 lines
+       76      })
+       77    );
+       78  
+       79 +  // 영상 제목 가져오기                                       
+       80 +  let videoTitle = "";                                        
+       81 +  try {                                                       
+       82 +    const videoUrl =                                          
+       83 +      `https://www.googleapis.com/youtube/v3/videos` +        
+       84 +      `?part=snippet&id=${videoId}&fields=items/snippet/title&
+          +key=${apiKey}`;                                               
+       85 +    const videoRes = await fetch(videoUrl, {                  
+       86 +      signal: AbortSignal.timeout(YOUTUBE_TIMEOUT_MS),        
+       87 +    });                                                       
+       88 +    if (videoRes.ok) {                                        
+       89 +      const videoData = await videoRes.json();                
+       90 +      videoTitle = videoData.items?.[0]?.snippet?.title ?? "";
+       91 +    }                                                         
+       92 +  } catch {                                                   
+       93 +    // 제목 가져오기 실패 시 빈 문자열 유지                   
+       94 +  }                                                           
+       95 +                                                              
+       96    const result: YouTubeCommentsResponse = {
+       97      comments,
+       98      totalResults: data.pageInfo?.totalResults ?? 0,
+       99      videoId,
+      100 +    videoTitle,                                               
+      101    };
+      102  
+      103    return Response.json(result);
+
+● Now update page.tsx to use the video title:
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      114        const ytKey = envKeys.youtube ? "" : keys.youtube;
+      115        const gemKey = envKeys.gemini ? "" : keys.gemini;
+      116  
+      117 -      const { comments, totalResults } = await fetchComments( 
+      117 +      const { comments, totalResults, videoTitle } = await fet
+          +chComments(                                                   
+      118          videoId,
+      119          ytKey
+      120        );
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      158          id: crypto.randomUUID(),
+      159          videoId,
+      160          url: trimmedUrl,
+      161 -        title: result.summary.slice(0, 80),                   
+      161 +        title: videoTitle || result.summary.slice(0, 80),     
+      162          analyzedAt: new Date().toISOString(),
+      163          report: result,
+      164          commentsMeta: { analyzed: comments.length, total: tota
+           lResults },
+
+● Now I need to fix the tests. The YouTubeCommentsResponse type now requires
+  videoTitle, so all mocks need updating.
+
+● Searched for 1 pattern (ctrl+o to expand)
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 2 lines
+      145        ],
+      146        totalResults: 100,
+      147        videoId: "dQw4w9WgXcQ",
+      148 +      videoTitle: "테스트 영상 제목",                         
+      149      });
+      150      mockAnalyzeComments.mockResolvedValue(mockReport);
+      151  
+     ...
+      222        ],
+      223        totalResults: 100,
+      224        videoId: "dQw4w9WgXcQ",
+      225 +      videoTitle: "테스트 영상 제목",                         
+      226      });
+      227      mockAnalyzeComments.mockResolvedValueOnce(mockReport);
+      228  
+
+● Now update the YouTube comments route tests too. Let me check them.
+
+● Read 1 file (ctrl+o to expand)
+
+● The route tests use vi.stubGlobal("fetch", ...) with a single mock. Now the
+  route makes two fetch calls (comments + video title). The existing tests mock
+  fetch to return a single response — the second call (video title) will also
+  get the same mock. That's fine for error cases, but for the success tests the
+  video title fetch will get the comments response format, which won't have
+  items[0].snippet.title — it'll just result in an empty videoTitle, which is
+  acceptable.
+
+  However, the tests that check specific URL patterns (calledUrl) now have 2
+  calls. Let me check if any tests will break. The maxResults and env 폴백 tests
+   check mockFetch.mock.calls[0][0] which is the first call (comments) — that
+  should still work. The video title fetch is the second call.
+
+  Let me run the tests to see.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1 | tail -30)
+  ⎿    errorStatus: 'RESOURCE_EXHAUSTED',
+       message: 'Your prepayment credits are depleted.'
+     }
+     … +30 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+● All 195 tests pass. Let me also verify the build.
+
+● Bash(cd /c/prj/harness_framework && npm run build 2>&1 | tail -20)
+  ⎿     Generating static pages (5/7)
+      ✓ Generating static pages (7/7)
+        Finalizing page optimization ...
+     … +16 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● All good. 195 tests pass, build succeeds.
+
+  The sidebar history items now use the YouTube video title. The flow is:
+  1. YouTube comments route now also fetches the video title via the videos API
+  endpoint (part=snippet)
+  2. The video title is included in YouTubeCommentsResponse.videoTitle
+  3. page.tsx uses videoTitle as the history entry title, falling back to
+  result.summary.slice(0, 80) if the title fetch fails
+
+✻ Cogitated for 2m 40s

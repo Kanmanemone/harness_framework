@@ -76,10 +76,28 @@ export async function GET(request: Request): Promise<Response> {
     })
   );
 
+  // 영상 제목 가져오기
+  let videoTitle = "";
+  try {
+    const videoUrl =
+      `https://www.googleapis.com/youtube/v3/videos` +
+      `?part=snippet&id=${videoId}&fields=items/snippet/title&key=${apiKey}`;
+    const videoRes = await fetch(videoUrl, {
+      signal: AbortSignal.timeout(YOUTUBE_TIMEOUT_MS),
+    });
+    if (videoRes.ok) {
+      const videoData = await videoRes.json();
+      videoTitle = videoData.items?.[0]?.snippet?.title ?? "";
+    }
+  } catch {
+    // 제목 가져오기 실패 시 빈 문자열 유지
+  }
+
   const result: YouTubeCommentsResponse = {
     comments,
     totalResults: data.pageInfo?.totalResults ?? 0,
     videoId,
+    videoTitle,
   };
 
   return Response.json(result);

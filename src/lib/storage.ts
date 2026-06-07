@@ -1,7 +1,9 @@
-import type { ApiKeys } from "@/types";
+import type { ApiKeys, HistoryEntry } from "@/types";
 
 const YOUTUBE_KEY = "yt-sentiment-youtube-key";
 const GEMINI_KEY = "yt-sentiment-gemini-key";
+const HISTORY_KEY = "yt-sentiment-history";
+const MAX_HISTORY = 50;
 
 /**
  * localStorage에서 API 키를 읽어 반환한다.
@@ -50,6 +52,60 @@ export function deleteApiKey(type: "youtube" | "gemini"): void {
 /**
  * localStorage 접근 가능 여부를 반환한다.
  */
+/**
+ * localStorage에서 분석 기록을 읽어 반환한다 (최신순).
+ */
+export function getHistory(): HistoryEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as HistoryEntry[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 분석 기록을 맨 앞에 추가한다. 최대 MAX_HISTORY개 유지.
+ */
+export function addHistoryEntry(entry: HistoryEntry): void {
+  try {
+    const history = getHistory();
+    history.unshift(entry);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+  } catch {
+    // 실패 시 무시
+  }
+}
+
+/**
+ * ID로 분석 기록 하나를 삭제한다.
+ */
+export function deleteHistoryEntry(id: string): void {
+  try {
+    const history = getHistory();
+    const filtered = history.filter((e) => e.id !== id);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+  } catch {
+    // 실패 시 무시
+  }
+}
+
+/**
+ * 모든 분석 기록을 삭제한다.
+ */
+export function clearHistory(): void {
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // 실패 시 무시
+  }
+}
+
 export function isStorageAvailable(): boolean {
   const testKey = "__storage_test__";
   try {
