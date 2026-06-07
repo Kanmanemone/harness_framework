@@ -1,8 +1,8 @@
 import {
   buildAnalysisPrompt,
-  CLAUDE_MODEL,
-  CLAUDE_MAX_TOKENS,
-  ANTHROPIC_TIMEOUT_MS,
+  GEMINI_MODEL,
+  GEMINI_MAX_TOKENS,
+  GEMINI_TIMEOUT_MS,
 } from "@/lib/constants";
 import type { Comment } from "@/types";
 
@@ -50,21 +50,20 @@ export async function POST(request: Request): Promise<Response> {
 
   const prompt = buildAnalysisPrompt(comments);
 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
   let res: globalThis.Response;
   try {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: CLAUDE_MAX_TOKENS,
-        messages: [{ role: "user", content: prompt }],
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: GEMINI_MAX_TOKENS },
       }),
-      signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -81,27 +80,20 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!res.ok) {
     const errorBody = await res.json() as {
-      error?: { type?: string; message?: string };
+      error?: { code?: number; message?: string; status?: string };
     };
-    const errorType = errorBody?.error?.type;
+    const errorMessage = errorBody?.error?.message ?? "";
 
-    if (res.status === 401 || errorType === "authentication_error") {
+    if (errorMessage.includes("API key not valid") || errorBody?.error?.status === "UNAUTHENTICATED") {
       return Response.json(
-        { error: "Invalid Anthropic API key", isApiKeyError: true },
+        { error: "Invalid Gemini API key", isApiKeyError: true },
         { status: 401 }
       );
     }
 
-    if (errorType === "insufficient_quota") {
+    if (res.status === 429 || errorBody?.error?.status === "RESOURCE_EXHAUSTED") {
       return Response.json(
-        { error: "Insufficient Anthropic API credits" },
-        { status: 400 }
-      );
-    }
-
-    if (res.status === 429 || errorType === "rate_limit_error") {
-      return Response.json(
-        { error: "Rate limited. Please try again later." },
+        { error: "Gemini API quota exceeded" },
         { status: 429 }
       );
     }
@@ -114,16 +106,16 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     return Response.json(
-      { error: errorBody?.error?.message ?? "Unknown Anthropic API error" },
+      { error: errorMessage || "Unknown Gemini API error" },
       { status: res.status }
     );
   }
 
   const data = await res.json() as {
-    content: { type: string; text: string }[];
+    candidates: { content: { parts: { text: string }[] } }[];
   };
 
-  const rawText = data.content[0].text;
+  const rawText = data.candidates[0].content.parts[0].text;
 
   try {
     const jsonString = extractJson(rawText);

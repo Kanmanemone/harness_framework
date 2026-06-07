@@ -38,13 +38,13 @@ describe("analyzeComments", () => {
       })
     );
 
-    const result = await analyzeComments(mockComments, "sk-ant-test");
+    const result = await analyzeComments(mockComments, "gemini-test");
 
     expect(result).toEqual(mockReport);
     expect(fetch).toHaveBeenCalledWith("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comments: mockComments, apiKey: "sk-ant-test" }),
+      body: JSON.stringify({ comments: mockComments, apiKey: "gemini-test" }),
     });
   });
 
@@ -54,12 +54,12 @@ describe("analyzeComments", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         json: () =>
-          Promise.resolve({ error: "Invalid Anthropic API key" }),
+          Promise.resolve({ error: "Invalid Gemini API key" }),
       })
     );
 
     await expect(analyzeComments(mockComments, "bad-key")).rejects.toThrow(
-      "Invalid Anthropic API key"
+      "Invalid Gemini API key"
     );
   });
 

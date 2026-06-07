@@ -1,0 +1,1333 @@
+
+ ▐▛███▜▌   Claude Code v2.1.50
+▝▜█████▛▘  Opus 4.6 · Claude Pro
+  ▘▘ ▝▝    C:\prj\harness_framework
+
+✻ Conversation compacted (ctrl+o for history)
+
+
+❯ 생각해보니까, 내게 API 토큰이 없다는 걸 깨달았어. 무료 토큰을 제공하는    
+  Gemini API를 쓰고 싶어. 변경해줘.                                         
+
+● Entered plan mode
+  Claude is now exploring and designing an implementation approach.
+
+● Explore(Explore Gemini migration scope)
+  ⎿  Done (26 tool uses · 68.5k tokens · 1m 6s)
+  (ctrl+o to expand)
+
+● Plan(Research Gemini API format)
+  ⎿  Done (16 tool uses · 65.5k tokens · 2m 4s)
+  (ctrl+o to expand)
+
+● Now let me read a few key files to verify details before writing the plan.
+
+● Read 3 files (ctrl+o to expand)
+
+● Now I have all the details. Let me write the plan.
+
+● Updated plan
+  ⎿  /plan to preview
+  ⎿  User rejected Claude's plan:
+     ╭─────────────────────────────────────────────────────────────────────────╮
+     │ Anthropic → Gemini API 마이그레이션 계획                                │
+     │                                                                         │
+     │ Context                                                                 │
+     │                                                                         │
+     │ 사용자가 Anthropic API 토큰이 없어서 무료 티어를 제공하는 Google Gemini │
+     │  API로 전환하려 함. 14개 파일(프로덕션 7 + 테스트 7)에 걸쳐 anthropic → │
+     │  gemini 명칭 변경 및 API 호출 형식 변경이 필요.                         │
+     │                                                                         │
+     │ Gemini API 스펙                                                         │
+     │                                                                         │
+     │ - Endpoint: https://generativelanguage.googleapis.com/v1beta/models/{mo │
+     │ del}:generateContent?key={API_KEY}                                      │
+     │ - Model: gemini-2.0-flash                                               │
+     │ - Request: { contents: [{ parts: [{ text }] }], generationConfig: {     │
+     │ maxOutputTokens } }                                                     │
+     │ - Response: { candidates: [{ content: { parts: [{ text }] } }] }        │
+     │ - Error: { error: { code, message, status } } (status:                  │
+     │ INVALID_ARGUMENT, RESOURCE_EXHAUSTED, INTERNAL 등)                      │
+     │                                                                         │
+     │ 변경 파일 목록 (TDD — 테스트 먼저)                                      │
+     │                                                                         │
+     │ 1. Types: src/types/index.ts (+test)                                    │
+     │                                                                         │
+     │ - ApiKeys.anthropic → ApiKeys.gemini, JSDoc 업데이트                    │
+     │                                                                         │
+     │ 2. Constants: src/lib/constants.ts (+test)                              │
+     │                                                                         │
+     │ - CLAUDE_MODEL → GEMINI_MODEL ("gemini-2.0-flash")                      │
+     │ - CLAUDE_MAX_TOKENS → GEMINI_MAX_TOKENS (2048 유지)                     │
+     │ - ANTHROPIC_TIMEOUT_MS → GEMINI_TIMEOUT_MS (30000 유지)                 │
+     │ - ERROR_MESSAGES: "Invalid Anthropic API key" → "Invalid Gemini API     │
+     │ key", "Insufficient Anthropic API credits" → "Gemini API quota          │
+     │ exceeded" 등                                                            │
+     │ - API_KEY_ERROR_CODES: "Invalid Anthropic API key" → "Invalid Gemini    │
+     │ API key"                                                                │
+     │                                                                         │
+     │ 3. Storage: src/lib/storage.ts (+test)                                  │
+     │                                                                         │
+     │ - ANTHROPIC_KEY → GEMINI_KEY ("yt-sentiment-gemini-key")                │
+     │ - anthropic → gemini (타입 파라미터, 반환값)                            │
+     │                                                                         │
+     │ 4. API Route (핵심): src/app/api/analyze/route.ts (+test)               │
+     │                                                                         │
+     │ - Import: GEMINI_MODEL, GEMINI_MAX_TOKENS, GEMINI_TIMEOUT_MS            │
+     │ - Fetch URL: Gemini endpoint (API key in query param)                   │
+     │ - Request body: { contents, generationConfig } 형식                     │
+     │ - 헤더: Content-Type만 (anthropic-version, x-api-key 제거)              │
+     │ - 에러 처리: Gemini 에러 구조 { error: { code, message, status } } 대응 │
+     │   - API key not valid / UNAUTHENTICATED → 401 + "Invalid Gemini API     │
+     │ key"                                                                    │
+     │   - RESOURCE_EXHAUSTED / 429 → 429 + "Gemini API quota exceeded"        │
+     │   - 500+ → 502 + "AI service temporarily unavailable"                   │
+     │ - 응답 파싱: data.candidates[0].content.parts[0].text                   │
+     │                                                                         │
+     │ 5. Service: src/services/analyzeService.ts (+test)                      │
+     │                                                                         │
+     │ - 프로덕션 코드 변경 없음 (generic apiKey 파라미터)                     │
+     │ - 테스트만 에러 문자열 업데이트                                         │
+     │                                                                         │
+     │ 6. Component: src/components/ApiKeySettings.tsx (+test)                 │
+     │                                                                         │
+     │ - anthropicKey → geminiKey state                                        │
+     │ - UI 라벨: "Anthropic API 키" → "Gemini API 키"                         │
+     │ - 링크: console.anthropic.com → aistudio.google.com/apikey              │
+     │ - onDelete("anthropic") → onDelete("gemini")                            │
+     │                                                                         │
+     │ 7. Page: src/app/page.tsx (+test)                                       │
+     │                                                                         │
+     │ - savedKeys.anthropic → savedKeys.gemini (모든 참조)                    │
+     │ - 타입 어노테이션 업데이트                                              │
+     │                                                                         │
+     │ 검증                                                                    │
+     │                                                                         │
+     │ - npm run test — 전체 테스트 통과                                       │
+     │ - npm run build — 빌드 성공                                             │
+     ╰─────────────────────────────────────────────────────────────────────────╯
+
+❯ 진행해줘
+
+● TDD 순서대로 진행하겠습니다. 먼저 현재 테스트 상태를 확인하고, 타입부터
+  변경합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Step 1: Types — 테스트 먼저, 구현 후.
+
+● Update(src\types\index.test.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      83    it("ApiKeys 타입이 올바른 구조를 가진다", () => {
+      84      const keys: ApiKeys = {
+      85        youtube: "AIza...",
+      86 -      anthropic: "sk-ant-...",                                 
+      86 +      gemini: "AIza...",                                       
+      87      };
+      88      expect(keys.youtube).toBeTruthy();
+      89 -    expect(keys.anthropic).toBeTruthy();                       
+      89 +    expect(keys.gemini).toBeTruthy();                          
+      90    });
+      91  
+      92    it("ApiError 타입이 isApiKeyError 선택적 필드를 포함한다", ()
+           => {
+
+● Update(src\types\index.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      79  export interface ApiKeys {
+      80    /** YouTube Data API v3 키 */
+      81    youtube: string;
+      82 -  /** Anthropic API 키 */                                      
+      83 -  anthropic: string;                                           
+      82 +  /** Gemini API 키 */                                         
+      83 +  gemini: string;                                              
+      84  }
+      85  
+      86  /** API 에러 응답 */
+
+● Step 2: Constants — 테스트와 구현 파일을 읽고 수정합니다.
+
+● Read 2 files (ctrl+o to expand)
+
+● 테스트 파일 먼저 수정합니다.
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 3 lines, removed 3 lines
+       3    buildAnalysisPrompt,
+       4    mapErrorMessage,
+       5    isApiKeyError,
+       6 -  CLAUDE_MODEL,                                                
+       7 -  CLAUDE_MAX_TOKENS,                                           
+       6 +  GEMINI_MODEL,                                                
+       7 +  GEMINI_MAX_TOKENS,                                           
+       8    YOUTUBE_TIMEOUT_MS,
+       9 -  ANTHROPIC_TIMEOUT_MS,                                        
+       9 +  GEMINI_TIMEOUT_MS,                                           
+      10  } from "./constants";
+      11  import type { Comment } from "@/types";
+      12  
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 6 lines, removed 6 lines
+      12  
+      13  describe("constants", () => {
+      14    describe("상수 값", () => {
+      15 -    it("CLAUDE_MODEL", () => {                                 
+      16 -      expect(CLAUDE_MODEL).toBe("claude-sonnet-4-20250514");   
+      15 +    it("GEMINI_MODEL", () => {                                 
+      16 +      expect(GEMINI_MODEL).toBe("gemini-2.0-flash");           
+      17      });
+      18  
+      19 -    it("CLAUDE_MAX_TOKENS", () => {                            
+      20 -      expect(CLAUDE_MAX_TOKENS).toBe(2048);                    
+      19 +    it("GEMINI_MAX_TOKENS", () => {                            
+      20 +      expect(GEMINI_MAX_TOKENS).toBe(2048);                    
+      21      });
+      22  
+      23      it("YOUTUBE_TIMEOUT_MS", () => {
+      24        expect(YOUTUBE_TIMEOUT_MS).toBe(15000);
+      25      });
+      26  
+      27 -    it("ANTHROPIC_TIMEOUT_MS", () => {                         
+      28 -      expect(ANTHROPIC_TIMEOUT_MS).toBe(30000);                
+      27 +    it("GEMINI_TIMEOUT_MS", () => {                            
+      28 +      expect(GEMINI_TIMEOUT_MS).toBe(30000);                   
+      29      });
+      30    });
+      31  
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      84        expect(mapErrorMessage("videoNotFound")).toBe("영상을 찾
+          을 수 없습니다. URL을 확인해 주세요.");
+      85      });
+      86  
+      87 -    it("Invalid Anthropic API key 에러를 매핑한다", () => {    
+      88 -      expect(mapErrorMessage("Invalid Anthropic API key")).toBe
+         -("Anthropic API 키가 유효하지 않습니다. 키를 확인해 주세요."); 
+      87 +    it("Invalid Gemini API key 에러를 매핑한다", () => {       
+      88 +      expect(mapErrorMessage("Invalid Gemini API key")).toBe("G
+         +emini API 키가 유효하지 않습니다. 키를 확인해 주세요.");       
+      89      });
+      90  
+      91 -    it("Insufficient Anthropic API credits 에러를 매핑한다", ()
+         - => {                                                          
+      92 -      expect(mapErrorMessage("Insufficient Anthropic API credit
+         -s")).toBe("Anthropic API 잔액이 부족합니다. 크레딧을 확인해 주 
+         -세요.");                                                       
+      91 +    it("Gemini API quota exceeded 에러를 매핑한다", () => {    
+      92 +      expect(mapErrorMessage("Gemini API quota exceeded")).toBe
+         +("Gemini API 할당량을 초과했습니다. 잠시 후 다시 시도해 주세요.
+         +");                                                            
+      93      });
+      94  
+      95      it("Rate limited 에러를 매핑한다", () => {
+
+● Update(src\lib\constants.test.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      126    });
+      127  
+      128    describe("isApiKeyError", () => {
+      129 -    it("Invalid Anthropic API key는 true를 반환한다", () => { 
+      130 -      expect(isApiKeyError("Invalid Anthropic API key")).toBe(
+          -true);                                                        
+      129 +    it("Invalid Gemini API key는 true를 반환한다", () => {    
+      130 +      expect(isApiKeyError("Invalid Gemini API key")).toBe(tru
+          +e);                                                           
+      131      });
+      132  
+      133      it("YouTube API error는 true를 반환한다", () => {
+
+● 이제 프로덕션 코드를 수정합니다.
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      1  import type { Comment } from "@/types";
+      2  
+      3 -export const CLAUDE_MODEL = "claude-sonnet-4-20250514";         
+      4 -export const CLAUDE_MAX_TOKENS = 2048;                          
+      3 +export const GEMINI_MODEL = "gemini-2.0-flash";                 
+      4 +export const GEMINI_MAX_TOKENS = 2048;                          
+      5  export const YOUTUBE_TIMEOUT_MS = 15000;
+      6 -export const ANTHROPIC_TIMEOUT_MS = 30000;                      
+      6 +export const GEMINI_TIMEOUT_MS = 30000;                         
+      7  
+      8  /**
+      9   * 댓글 목록을 Claude 분석용 프롬프트로 조립한다.
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+       6  export const GEMINI_TIMEOUT_MS = 30000;
+       7  
+       8  /**
+       9 - * 댓글 목록을 Claude 분석용 프롬프트로 조립한다.              
+       9 + * 댓글 목록을 Gemini 분석용 프롬프트로 조립한다.              
+      10   */
+      11  export function buildAnalysisPrompt(comments: Comment[]): strin
+          g {
+      12    const commentLines = comments
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      50    commentsDisabled: "이 영상은 댓글이 비활성화되어 있습니다.",
+      51    quotaExceeded: "YouTube API 일일 할당량을 초과했습니다. 내일 
+          다시 시도해 주세요.",
+      52    videoNotFound: "영상을 찾을 수 없습니다. URL을 확인해 주세요.
+          ",
+      53 -  "Invalid Anthropic API key": "Anthropic API 키가 유효하지 않 
+         -습니다. 키를 확인해 주세요.",                                  
+      54 -  "Insufficient Anthropic API credits": "Anthropic API 잔액이  
+         -부족합니다. 크레딧을 확인해 주세요.",                          
+      53 +  "Invalid Gemini API key": "Gemini API 키가 유효하지 않습니다.
+         + 키를 확인해 주세요.",                                         
+      54 +  "Gemini API quota exceeded": "Gemini API 할당량을 초과했습니 
+         +다. 잠시 후 다시 시도해 주세요.",                              
+      55    "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주
+          세요.",
+      56    "AI service temporarily unavailable": "AI 서비스에 일시적인 
+          문제가 있습니다. 잠시 후 다시 시도해 주세요.",
+      57    "AI service timeout": "AI 응답이 너무 오래 걸립니다. 다시 시
+          도해 주세요.",
+
+● Update(src\lib\constants.ts)
+  ⎿  Added 1 line, removed 1 line
+      69  }
+      70  
+      71  const API_KEY_ERROR_CODES = new Set([
+      72 -  "Invalid Anthropic API key",                                 
+      72 +  "Invalid Gemini API key",                                    
+      73    "YouTube API error",
+      74  ]);
+      75  
+
+● Step 3: Storage — 테스트 및 구현 수정.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\lib\storage.test.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      10      it("키가 없으면 빈 문자열을 반환한다", () => {
+      11        const keys = getApiKeys();
+      12        expect(keys.youtube).toBe("");
+      13 -      expect(keys.anthropic).toBe("");                         
+      13 +      expect(keys.gemini).toBe("");                            
+      14      });
+      15  
+      16      it("저장된 키를 반환한다", () => {
+      17        localStorage.setItem("yt-sentiment-youtube-key", "yt-key-
+          123");
+      18 -      localStorage.setItem("yt-sentiment-anthropic-key", "sk-an
+         -t-456");                                                       
+      18 +      localStorage.setItem("yt-sentiment-gemini-key", "gemini-4
+         +56");                                                          
+      19        const keys = getApiKeys();
+      20        expect(keys.youtube).toBe("yt-key-123");
+      21 -      expect(keys.anthropic).toBe("sk-ant-456");               
+      21 +      expect(keys.gemini).toBe("gemini-456");                  
+      22      });
+      23  
+      24      it("localStorage 접근 실패 시 빈 문자열을 반환한다", () => 
+          {
+     ...
+      27        });
+      28        const keys = getApiKeys();
+      29        expect(keys.youtube).toBe("");
+      30 -      expect(keys.anthropic).toBe("");                         
+      30 +      expect(keys.gemini).toBe("");                            
+      31        vi.restoreAllMocks();
+      32      });
+      33    });
+
+● Update(src\lib\storage.test.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      34  
+      35    describe("saveApiKeys", () => {
+      36      it("두 키를 localStorage에 저장한다", () => {
+      37 -      saveApiKeys({ youtube: "yt-key", anthropic: "ant-key" });
+      37 +      saveApiKeys({ youtube: "yt-key", gemini: "gem-key" });   
+      38        expect(localStorage.getItem("yt-sentiment-youtube-key")).
+          toBe("yt-key");
+      39 -      expect(localStorage.getItem("yt-sentiment-anthropic-key")
+         -).toBe("ant-key");                                             
+      39 +      expect(localStorage.getItem("yt-sentiment-gemini-key")).t
+         +oBe("gem-key");                                                
+      40      });
+      41  
+      42      it("localStorage 접근 실패 시 에러를 무시한다", () => {
+
+● Update(src\lib\storage.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      43        vi.spyOn(Storage.prototype, "setItem").mockImplementation
+          (() => {
+      44          throw new Error("QuotaExceeded");
+      45        });
+      46 -      expect(() => saveApiKeys({ youtube: "a", anthropic: "b" }
+         -)).not.toThrow();                                              
+      46 +      expect(() => saveApiKeys({ youtube: "a", gemini: "b" })).
+         +not.toThrow();                                                 
+      47        vi.restoreAllMocks();
+      48      });
+      49    });
+
+● Update(src\lib\storage.test.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      55        expect(localStorage.getItem("yt-sentiment-youtube-key")).
+          toBeNull();
+      56      });
+      57  
+      58 -    it("anthropic 키를 삭제한다", () => {                      
+      59 -      localStorage.setItem("yt-sentiment-anthropic-key", "ant-k
+         -ey");                                                          
+      60 -      deleteApiKey("anthropic");                               
+      61 -      expect(localStorage.getItem("yt-sentiment-anthropic-key")
+         -).toBeNull();                                                  
+      58 +    it("gemini 키를 삭제한다", () => {                         
+      59 +      localStorage.setItem("yt-sentiment-gemini-key", "gem-key"
+         +);                                                             
+      60 +      deleteApiKey("gemini");                                  
+      61 +      expect(localStorage.getItem("yt-sentiment-gemini-key")).t
+         +oBeNull();                                                     
+      62      });
+      63  
+      64      it("localStorage 접근 실패 시 에러를 무시한다", () => {
+
+● Update(src\lib\storage.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      91        delete globalThis.window;
+      92        const keys = getApiKeys();
+      93        expect(keys.youtube).toBe("");
+      94 -      expect(keys.anthropic).toBe("");                         
+      94 +      expect(keys.gemini).toBe("");                            
+      95        globalThis.window = originalWindow;
+      96      });
+      97    });
+
+● 이제 storage.ts 프로덕션 코드를 수정합니다.
+
+● Update(src\lib\storage.ts)
+  ⎿  Added 6 lines, removed 6 lines
+      1  import type { ApiKeys } from "@/types";
+      2  
+      3  const YOUTUBE_KEY = "yt-sentiment-youtube-key";
+      4 -const ANTHROPIC_KEY = "yt-sentiment-anthropic-key";             
+      4 +const ANTHROPIC_KEY = "yt-sentiment-gemini-key";                
+      5  
+      6  /**
+      7   * localStorage에서 API 키를 읽어 반환한다.
+     ...
+       9   */
+      10  export function getApiKeys(): ApiKeys {
+      11    if (typeof window === "undefined") {
+      12 -    return { youtube: "", anthropic: "" };                     
+      12 +    return { youtube: "", gemini: "" };                        
+      13    }
+      14  
+      15    try {
+      16      return {
+      17        youtube: localStorage.getItem(YOUTUBE_KEY) ?? "",
+      18 -      anthropic: localStorage.getItem(ANTHROPIC_KEY) ?? "",    
+      18 +      gemini: localStorage.getItem(ANTHROPIC_KEY) ?? "",       
+      19      };
+      20    } catch {
+      21 -    return { youtube: "", anthropic: "" };                     
+      21 +    return { youtube: "", gemini: "" };                        
+      22    }
+      23  }
+      24  
+     ...
+      29  export function saveApiKeys(keys: ApiKeys): void {
+      30    try {
+      31      localStorage.setItem(YOUTUBE_KEY, keys.youtube);
+      32 -    localStorage.setItem(ANTHROPIC_KEY, keys.anthropic);       
+      32 +    localStorage.setItem(ANTHROPIC_KEY, keys.gemini);          
+      33    } catch {
+      34      // 시크릿 모드 등에서 실패 시 무시
+      35    }
+     ...
+      38  /**
+      39   * 지정된 API 키를 localStorage에서 삭제한다.
+      40   */
+      41 -export function deleteApiKey(type: "youtube" | "anthropic"): vo
+         -id {                                                           
+      41 +export function deleteApiKey(type: "youtube" | "gemini"): void 
+         +{                                                              
+      42    const key = type === "youtube" ? YOUTUBE_KEY : ANTHROPIC_KEY;
+      43    try {
+      44      localStorage.removeItem(key);
+
+● Update(src\lib\storage.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      1  import type { ApiKeys } from "@/types";
+      2  
+      3  const YOUTUBE_KEY = "yt-sentiment-youtube-key";
+      4 -const ANTHROPIC_KEY = "yt-sentiment-gemini-key";                
+      4 +const GEMINI_KEY = "yt-sentiment-gemini-key";                   
+      5  
+      6  /**
+      7   * localStorage에서 API 키를 읽어 반환한다.
+     ...
+      15    try {
+      16      return {
+      17        youtube: localStorage.getItem(YOUTUBE_KEY) ?? "",
+      18 -      gemini: localStorage.getItem(ANTHROPIC_KEY) ?? "",       
+      18 +      gemini: localStorage.getItem(GEMINI_KEY) ?? "",          
+      19      };
+      20    } catch {
+      21      return { youtube: "", gemini: "" };
+     ...
+      29  export function saveApiKeys(keys: ApiKeys): void {
+      30    try {
+      31      localStorage.setItem(YOUTUBE_KEY, keys.youtube);
+      32 -    localStorage.setItem(ANTHROPIC_KEY, keys.gemini);          
+      32 +    localStorage.setItem(GEMINI_KEY, keys.gemini);             
+      33    } catch {
+      34      // 시크릿 모드 등에서 실패 시 무시
+      35    }
+     ...
+      39   * 지정된 API 키를 localStorage에서 삭제한다.
+      40   */
+      41  export function deleteApiKey(type: "youtube" | "gemini"): void 
+          {
+      42 -  const key = type === "youtube" ? YOUTUBE_KEY : ANTHROPIC_KEY;
+      42 +  const key = type === "youtube" ? YOUTUBE_KEY : GEMINI_KEY;   
+      43    try {
+      44      localStorage.removeItem(key);
+      45    } catch {
+
+● storage.ts가 올바르게 변경되었는지 확인합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Step 4: API Route — 핵심 변경. 테스트 먼저 수정합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● 테스트 파일을 Gemini 형식으로 전면 수정합니다.
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      1  import { describe, it, expect, vi, beforeEach } from "vitest";
+      2  import { POST } from "./route";
+      3  
+      4 -const VALID_API_KEY = "sk-ant-test-key-123";                    
+      4 +const VALID_API_KEY = "test-gemini-key-123";                    
+      5  
+      6  const sampleComments = [
+      7    { id: "c1", text: "좋은 영상 감사합니다", author: "유저A", lik
+         eCount: 42, publishedAt: "2024-01-15T09:30:00Z" },
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 4 lines, removed 5 lines
+      28    });
+      29  }
+      30  
+      31 -function makeAnthropicResponse(text: string) {                 
+      31 +function makeGeminiResponse(text: string) {                    
+      32    return {
+      33      ok: true,
+      34      status: 200,
+      35      json: () =>
+      36        Promise.resolve({
+      37 -        content: [{ type: "text", text }],                     
+      37 +        candidates: [{ content: { parts: [{ text }] } }],      
+      38        }),
+      39    };
+      40  }
+      41  
+      42 -function makeAnthropicErrorResponse(status: number, type: strin
+         -g, message = "Error") {                                        
+      42 +function makeGeminiErrorResponse(status: number, message: strin
+         +g, errorStatus = "INVALID_ARGUMENT") {                         
+      43    return {
+      44      ok: false,
+      45      status,
+      46      json: () =>
+      47        Promise.resolve({
+      48 -        type: "error",                                         
+      49 -        error: { type, message },                              
+      48 +        error: { code: status, message, status: errorStatus }, 
+      49        }),
+      50    };
+      51  }
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 4 lines, removed 4 lines
+      59      it("유효한 JSON → 200 + AnalysisReport", async () => {
+      60        vi.stubGlobal(
+      61          "fetch",
+      62 -        vi.fn().mockResolvedValue(makeAnthropicResponse(JSON.st
+         -ringify(validReport)))                                         
+      62 +        vi.fn().mockResolvedValue(makeGeminiResponse(JSON.strin
+         +gify(validReport)))                                            
+      63        );
+      64  
+      65        const res = await POST(makeRequest({ comments: sampleComm
+          ents, apiKey: VALID_API_KEY }));
+     ...
+      77        const wrapped = "```json\n" + JSON.stringify(validReport)
+           + "\n```";
+      78        vi.stubGlobal(
+      79          "fetch",
+      80 -        vi.fn().mockResolvedValue(makeAnthropicResponse(wrapped
+         -))                                                             
+      80 +        vi.fn().mockResolvedValue(makeGeminiResponse(wrapped)) 
+      81        );
+      82  
+      83        const res = await POST(makeRequest({ comments: sampleComm
+          ents, apiKey: VALID_API_KEY }));
+     ...
+      91        const withText = "Here is the analysis:\n" + JSON.stringi
+          fy(validReport) + "\nDone.";
+      92        vi.stubGlobal(
+      93          "fetch",
+      94 -        vi.fn().mockResolvedValue(makeAnthropicResponse(withTex
+         -t))                                                            
+      94 +        vi.fn().mockResolvedValue(makeGeminiResponse(withText))
+      95        );
+      96  
+      97        const res = await POST(makeRequest({ comments: sampleComm
+          ents, apiKey: VALID_API_KEY }));
+     ...
+      183        vi.stubGlobal(
+      184          "fetch",
+      185          vi.fn().mockResolvedValue(
+      186 -          makeAnthropicResponse("I cannot analyze these commen
+          -ts because they are inappropriate.")                          
+      186 +          makeGeminiResponse("I cannot analyze these comments 
+          +because they are inappropriate.")                             
+      187          )
+      188        );
+      189  
+
+● Update(src\app\api\analyze\route.test.ts)
+  ⎿  Added 9 lines, removed 9 lines
+      128      });
+      129    });
+      130  
+      131 -  describe("Anthropic API 에러", () => {                      
+      132 -    it("401 (authentication_error) → 401 + isApiKeyError: true
+          -", async () => {                                              
+      131 +  describe("Gemini API 에러", () => {                         
+      132 +    it("API key not valid → 401 + isApiKeyError: true", async 
+          +() => {                                                       
+      133        vi.stubGlobal(
+      134          "fetch",
+      135          vi.fn().mockResolvedValue(
+      136 -          makeAnthropicErrorResponse(401, "authentication_erro
+          -r", "Invalid API key")                                        
+      136 +          makeGeminiErrorResponse(400, "API key not valid. Ple
+          +ase pass a valid API key.", "INVALID_ARGUMENT")               
+      137          )
+      138        );
+      139  
+     ...
+      141        expect(res.status).toBe(401);
+      142  
+      143        const body = await res.json();
+      144 -      expect(body.error).toBe("Invalid Anthropic API key");   
+      144 +      expect(body.error).toBe("Invalid Gemini API key");      
+      145        expect(body.isApiKeyError).toBe(true);
+      146      });
+      147  
+      148 -    it("429 (rate_limit_error) → 429", async () => {          
+      148 +    it("429 (RESOURCE_EXHAUSTED) → 429", async () => {        
+      149        vi.stubGlobal(
+      150          "fetch",
+      151          vi.fn().mockResolvedValue(
+      152 -          makeAnthropicErrorResponse(429, "rate_limit_error", 
+          -"Rate limited")                                               
+      152 +          makeGeminiErrorResponse(429, "Resource exhausted", "
+          +RESOURCE_EXHAUSTED")                                          
+      153          )
+      154        );
+      155  
+     ...
+      157        expect(res.status).toBe(429);
+      158  
+      159        const body = await res.json();
+      160 -      expect(body.error).toBe("Rate limited. Please try again 
+          -later.");                                                     
+      160 +      expect(body.error).toBe("Gemini API quota exceeded");   
+      161        expect(body.isApiKeyError).toBeUndefined();
+      162      });
+      163  
+      164 -    it("500 (api_error) → 502", async () => {                 
+      164 +    it("500 (INTERNAL) → 502", async () => {                  
+      165        vi.stubGlobal(
+      166          "fetch",
+      167          vi.fn().mockResolvedValue(
+      168 -          makeAnthropicErrorResponse(500, "api_error", "Intern
+          -al server error")                                             
+      168 +          makeGeminiErrorResponse(500, "Internal error", "INTE
+          +RNAL")                                                        
+      169          )
+      170        );
+      171  
+
+● 이제 프로덕션 route.ts를 Gemini API로 수정합니다.
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 3 lines, removed 3 lines
+      1  import {
+      2    buildAnalysisPrompt,
+      3 -  CLAUDE_MODEL,                                                 
+      4 -  CLAUDE_MAX_TOKENS,                                            
+      5 -  ANTHROPIC_TIMEOUT_MS,                                         
+      3 +  GEMINI_MODEL,                                                 
+      4 +  GEMINI_MAX_TOKENS,                                            
+      5 +  GEMINI_TIMEOUT_MS,                                            
+      6  } from "@/lib/constants";
+      7  import type { Comment } from "@/types";
+      8  
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 6 lines, removed 7 lines
+      50  
+      51    const prompt = buildAnalysisPrompt(comments);
+      52  
+      53 +  const url = `https://generativelanguage.googleapis.com/v1beta
+         +/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;        
+      54 +                                                               
+      55    let res: globalThis.Response;
+      56    try {
+      55 -    res = await fetch("https://api.anthropic.com/v1/messages", 
+         -{                                                              
+      57 +    res = await fetch(url, {                                   
+      58        method: "POST",
+      59        headers: {
+      60          "Content-Type": "application/json",
+      59 -        "x-api-key": apiKey,                                   
+      60 -        "anthropic-version": "2023-06-01",                     
+      61        },
+      62        body: JSON.stringify({
+      63 -        model: CLAUDE_MODEL,                                   
+      64 -        max_tokens: CLAUDE_MAX_TOKENS,                         
+      65 -        messages: [{ role: "user", content: prompt }],         
+      63 +        contents: [{ parts: [{ text: prompt }] }],             
+      64 +        generationConfig: { maxOutputTokens: GEMINI_MAX_TOKENS 
+         +},                                                             
+      65        }),
+      67 -      signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),       
+      66 +      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),          
+      67      });
+      68    } catch (err) {
+      69      if (err instanceof DOMException && err.name === "AbortError
+          ") {
+
+● Update(src\app\api\analyze\route.ts)
+  ⎿  Added 9 lines, removed 16 lines
+       80  
+       81    if (!res.ok) {
+       82      const errorBody = await res.json() as {
+       83 -      error?: { type?: string; message?: string };            
+       83 +      error?: { code?: number; message?: string; status?: stri
+          +ng };                                                         
+       84      };
+       85 -    const errorType = errorBody?.error?.type;                 
+       85 +    const errorMessage = errorBody?.error?.message ?? "";     
+       86  
+       87 -    if (res.status === 401 || errorType === "authentication_er
+          -ror") {                                                       
+       87 +    if (errorMessage.includes("API key not valid") || errorBod
+          +y?.error?.status === "UNAUTHENTICATED") {                     
+       88        return Response.json(
+       89 -        { error: "Invalid Anthropic API key", isApiKeyError: t
+          -rue },                                                        
+       89 +        { error: "Invalid Gemini API key", isApiKeyError: true
+          + },                                                           
+       90          { status: 401 }
+       91        );
+       92      }
+       93  
+       94 -    if (errorType === "insufficient_quota") {                 
+       94 +    if (res.status === 429 || errorBody?.error?.status === "RE
+          +SOURCE_EXHAUSTED") {                                          
+       95        return Response.json(
+       96 -        { error: "Insufficient Anthropic API credits" },      
+       97 -        { status: 400 }                                       
+       98 -      );                                                      
+       99 -    }                                                         
+      100 -                                                              
+      101 -    if (res.status === 429 || errorType === "rate_limit_error"
+          -) {                                                           
+      102 -      return Response.json(                                   
+      103 -        { error: "Rate limited. Please try again later." },   
+       96 +        { error: "Gemini API quota exceeded" },               
+       97          { status: 429 }
+       98        );
+       99      }
+     ...
+      106      }
+      107  
+      108      return Response.json(
+      116 -      { error: errorBody?.error?.message ?? "Unknown Anthropic
+          - API error" },                                                
+      109 +      { error: errorMessage || "Unknown Gemini API error" },  
+      110        { status: res.status }
+      111      );
+      112    }
+      113  
+      114    const data = await res.json() as {
+      122 -    content: { type: string; text: string }[];                
+      115 +    candidates: { content: { parts: { text: string }[] } }[]; 
+      116    };
+      117  
+      125 -  const rawText = data.content[0].text;                       
+      118 +  const rawText = data.candidates[0].content.parts[0].text;   
+      119  
+      120    try {
+      121      const jsonString = extractJson(rawText);
+
+● Step 5: analyzeService — 테스트만 수정.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\services\analyzeService.test.ts)
+  ⎿  Added 2 lines, removed 2 lines
+      38        })
+      39      );
+      40  
+      41 -    const result = await analyzeComments(mockComments, "sk-ant-
+         -test");                                                        
+      41 +    const result = await analyzeComments(mockComments, "gemini-
+         +test");                                                        
+      42  
+      43      expect(result).toEqual(mockReport);
+      44      expect(fetch).toHaveBeenCalledWith("/api/analyze", {
+      45        method: "POST",
+      46        headers: { "Content-Type": "application/json" },
+      47 -      body: JSON.stringify({ comments: mockComments, apiKey: "s
+         -k-ant-test" }),                                                
+      47 +      body: JSON.stringify({ comments: mockComments, apiKey: "g
+         +emini-test" }),                                                
+      48      });
+      49    });
+      50  
+
+● Update(src\services\analyzeService.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      54        vi.fn().mockResolvedValue({
+      55          ok: false,
+      56          json: () =>
+      57 -          Promise.resolve({ error: "Invalid Anthropic API key" 
+         -}),                                                            
+      57 +          Promise.resolve({ error: "Invalid Gemini API key" }),
+      58        })
+      59      );
+      60  
+
+● Update(src\services\analyzeService.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      59      );
+      60  
+      61      await expect(analyzeComments(mockComments, "bad-key")).reje
+          cts.toThrow(
+      62 -      "Invalid Anthropic API key"                              
+      62 +      "Invalid Gemini API key"                                 
+      63      );
+      64    });
+      65  
+
+● Step 6: ApiKeySettings — 테스트와 컴포넌트 수정.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\components\ApiKeySettings.test.tsx)
+  ⎿  Added 4 lines, removed 4 lines
+       7    onToggle: vi.fn(),
+       8    onSave: vi.fn(),
+       9    onDelete: vi.fn(),
+      10 -  savedKeys: { youtube: "", anthropic: "" },                   
+      10 +  savedKeys: { youtube: "", gemini: "" },                      
+      11    storageAvailable: true,
+      12  };
+      13  
+     ...
+      30      render(
+      31        <ApiKeySettings
+      32          {...defaultProps}
+      33 -        savedKeys={{ youtube: "AIzaSyAbcdefghijklmnop", anthrop
+         -ic: "" }}                                                      
+      33 +        savedKeys={{ youtube: "AIzaSyAbcdefghijklmnop", gemini:
+         + "" }}                                                         
+      34        />
+      35      );
+      36      expect(screen.getByText("AIzaSy...mnop")).toBeDefined();
+     ...
+      54  
+      55      expect(onSave).toHaveBeenCalledWith({
+      56        youtube: "yt-key",
+      57 -      anthropic: "ant-key",                                    
+      57 +      gemini: "ant-key",                                       
+      58      });
+      59    });
+      60  
+     ...
+      64        <ApiKeySettings
+      65          {...defaultProps}
+      66          onDelete={onDelete}
+      67 -        savedKeys={{ youtube: "some-youtube-key-here", anthropi
+         -c: "" }}                                                       
+      67 +        savedKeys={{ youtube: "some-youtube-key-here", gemini: 
+         +"" }}                                                          
+      68        />
+      69      );
+      70      fireEvent.click(screen.getByText("삭제"));
+
+● Update(src\components\ApiKeySettings.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      22    it("open이 true이면 패널을 렌더링한다", () => {
+      23      render(<ApiKeySettings {...defaultProps} />);
+      24      expect(screen.getByText("YouTube API 키")).toBeDefined();
+      25 -    expect(screen.getByText("Anthropic API 키")).toBeDefined();
+      25 +    expect(screen.getByText("Gemini API 키")).toBeDefined();   
+      26      expect(screen.getByText("저장")).toBeDefined();
+      27    });
+      28  
+
+● Update(src\components\ApiKeySettings.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      49  
+      50      const inputs = screen.getAllByPlaceholderText("API 키 입력"
+          );
+      51      fireEvent.change(inputs[0], { target: { value: "yt-key" } }
+          );
+      52 -    fireEvent.change(inputs[1], { target: { value: "ant-key" } 
+         -});                                                            
+      52 +    fireEvent.change(inputs[1], { target: { value: "gem-key" } 
+         +});                                                            
+      53      fireEvent.click(screen.getByText("저장"));
+      54  
+      55      expect(onSave).toHaveBeenCalledWith({
+
+● Update(src\components\ApiKeySettings.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      54  
+      55      expect(onSave).toHaveBeenCalledWith({
+      56        youtube: "yt-key",
+      57 -      gemini: "ant-key",                                       
+      57 +      gemini: "gem-key",                                       
+      58      });
+      59    });
+      60  
+
+● 이제 컴포넌트 프로덕션 코드를 수정합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\components\ApiKeySettings.tsx)
+  ⎿  Added 1 line, removed 1 line
+       7    open: boolean;
+       8    onToggle: () => void;
+       9    onSave: (keys: ApiKeys) => void;
+      10 -  onDelete: (type: "youtube" | "anthropic") => void;           
+      10 +  onDelete: (type: "youtube" | "gemini") => void;              
+      11    savedKeys: ApiKeys;
+      12    storageAvailable: boolean;
+      13  }
+
+● Update(src\components\ApiKeySettings.tsx)
+  ⎿  Added 3 lines, removed 3 lines
+      26    storageAvailable,
+      27  }: ApiKeySettingsProps) {
+      28    const [youtubeKey, setYoutubeKey] = useState("");
+      29 -  const [anthropicKey, setAnthropicKey] = useState("");        
+      29 +  const [geminiKey, setGeminiKey] = useState("");              
+      30  
+      31    if (!open) return null;
+      32  
+      33    const handleSave = () => {
+      34      onSave({
+      35        youtube: youtubeKey || savedKeys.youtube,
+      36 -      anthropic: anthropicKey || savedKeys.anthropic,          
+      36 +      gemini: geminiKey || savedKeys.gemini,                   
+      37      });
+      38      setYoutubeKey("");
+      39 -    setAnthropicKey("");                                       
+      39 +    setGeminiKey("");                                          
+      40    };
+      41  
+      42    return (
+
+● Update(src\components\ApiKeySettings.tsx)
+  ⎿  Added 11 lines, removed 11 lines
+       86          </p>
+       87        </div>
+       88  
+       89 -      {/* Anthropic API Key */}                               
+       89 +      {/* Gemini API Key */}                                  
+       90        <div className="space-y-1.5">
+       91          <div className="flex items-center justify-between">
+       92 -          <label className="text-sm text-neutral-400">Anthropi
+          -c API 키</label>                                              
+       93 -          {savedKeys.anthropic ? (                            
+       92 +          <label className="text-sm text-neutral-400">Gemini A
+          +PI 키</label>                                                 
+       93 +          {savedKeys.gemini ? (                               
+       94              <div className="flex items-center gap-2">
+       95                <svg className="text-emerald-400 w-4 h-4" fill="
+           none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1
+           .5}>
+       96                  <path strokeLinecap="round" strokeLinejoin="ro
+           und" d="M5 13l4 4L19 7" />
+       97                </svg>
+       98 -              <span className="text-xs text-neutral-500">{mask
+          -Key(savedKeys.anthropic)}</span>                              
+       98 +              <span className="text-xs text-neutral-500">{mask
+          +Key(savedKeys.gemini)}</span>                                 
+       99              </div>
+      100            ) : (
+      101              <span className="text-xs text-neutral-600">미설정<
+           /span>
+     ...
+      104          <div className="flex gap-2">
+      105            <input
+      106              type="password"
+      107 -            value={anthropicKey}                              
+      108 -            onChange={(e) => setAnthropicKey(e.target.value)} 
+      109 -            placeholder={savedKeys.anthropic ? "새 키로 변경" 
+          -: "API 키 입력"}                                              
+      107 +            value={geminiKey}                                 
+      108 +            onChange={(e) => setGeminiKey(e.target.value)}    
+      109 +            placeholder={savedKeys.gemini ? "새 키로 변경" : "
+          +API 키 입력"}                                                 
+      110              className="flex-1 rounded-lg bg-neutral-900 border
+            border-neutral-700 px-4 py-3 text-neutral-100 placeholder:tex
+           t-neutral-600 focus:border-neutral-500 focus:outline-none tran
+           sition-colors text-sm"
+      111            />
+      112 -          {savedKeys.anthropic && (                           
+      112 +          {savedKeys.gemini && (                              
+      113              <button
+      114 -              onClick={() => onDelete("anthropic")}           
+      114 +              onClick={() => onDelete("gemini")}              
+      115                className="text-neutral-500 hover:text-neutral-3
+           00 transition-colors text-sm"
+      116              >
+      117                삭제
+     ...
+      120          </div>
+      121          <p className="text-xs text-neutral-600">
+      122            <a
+      123 -            href="https://console.anthropic.com/"             
+      123 +            href="https://aistudio.google.com/apikey"         
+      124              target="_blank"
+      125              rel="noopener noreferrer"
+      126              className="text-neutral-400 underline hover:text-n
+           eutral-200"
+      127            >
+      128 -            Anthropic Console                                 
+      128 +            Google AI Studio                                  
+      129            </a>
+      130            에서 API 키를 발급받으세요.
+      131          </p>
+
+● Step 7: page.tsx — 테스트와 페이지 수정.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 11 lines, removed 11 lines
+      13  
+      14  // Mock storage
+      15  vi.mock("@/lib/storage", () => ({
+      16 -  getApiKeys: vi.fn(() => ({ youtube: "", anthropic: "" })),   
+      16 +  getApiKeys: vi.fn(() => ({ youtube: "", gemini: "" })),      
+      17    saveApiKeys: vi.fn(),
+      18    deleteApiKey: vi.fn(),
+      19    isStorageAvailable: vi.fn(() => true),
+     ...
+      42  describe("Home (page.tsx)", () => {
+      43    beforeEach(() => {
+      44      vi.clearAllMocks();
+      45 -    mockGetApiKeys.mockReturnValue({ youtube: "", anthropic: ""
+         - });                                                           
+      45 +    mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" })
+         +;                                                              
+      46    });
+      47  
+      48    it("API 키가 없으면 설정 패널이 열린다", () => {
+     ...
+      52    });
+      53  
+      54    it("API 키가 있으면 설정 패널이 닫힌다", () => {
+      55 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthrop
+         -ic: "ant-key" });                                              
+      55 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini:
+         + "ant-key" });                                                 
+      56      render(<Home />);
+      57      expect(screen.queryByText("YouTube API 키")).toBeNull();
+      58    });
+     ...
+      65    });
+      66  
+      67    it("잘못된 URL 입력 시 인라인 에러를 표시한다", () => {
+      68 -    mockGetApiKeys.mockReturnValue({ youtube: "yt", anthropic: 
+         -"ant" });                                                      
+      68 +    mockGetApiKeys.mockReturnValue({ youtube: "yt", gemini: "an
+         +t" });                                                         
+      69      render(<Home />);
+      70  
+      71      const input = screen.getByPlaceholderText("YouTube 영상 URL
+          을 붙여넣으세요");
+     ...
+      78    });
+      79  
+      80    it("API 키 미설정 시 인라인 에러 + 설정 패널 열기", () => {
+      81 -    mockGetApiKeys.mockReturnValue({ youtube: "", anthropic: ""
+         - });                                                           
+      81 +    mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" })
+         +;                                                              
+      82      render(<Home />);
+      83  
+      84      const input = screen.getByPlaceholderText("YouTube 영상 URL
+          을 붙여넣으세요");
+     ...
+       94    });
+       95  
+       96    it("URL 수정 시 인라인 에러가 제거된다", () => {
+       97 -    mockGetApiKeys.mockReturnValue({ youtube: "yt", anthropic:
+          - "ant" });                                                    
+       97 +    mockGetApiKeys.mockReturnValue({ youtube: "yt", gemini: "a
+          +nt" });                                                       
+       98      render(<Home />);
+       99  
+      100      const input = screen.getByPlaceholderText("YouTube 영상 UR
+           L을 붙여넣으세요");
+     ...
+      111    });
+      112  
+      113    it("정상 분석 흐름: 리포트가 표시된다", async () => {
+      114 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthro
+          -pic: "ant-key" });                                            
+      114 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+          +: "ant-key" });                                               
+      115      mockFetchComments.mockResolvedValue({
+      116        comments: [
+      117          { id: "1", text: "좋아요", author: "A", likeCount: 5, 
+           publishedAt: "2024-01-01T00:00:00Z" },
+     ...
+      135    });
+      136  
+      137    it("에러 흐름: fetchComments 실패 시 에러를 표시한다", async
+            () => {
+      138 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthro
+          -pic: "ant-key" });                                            
+      138 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+          +: "ant-key" });                                               
+      139      mockFetchComments.mockRejectedValue(new Error("commentsDis
+           abled"));
+      140  
+      141      render(<Home />);
+     ...
+      154    });
+      155  
+      156    it("API 키 에러 시 설정 패널이 열린다", async () => {
+      157 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthro
+          -pic: "ant-key" });                                            
+      157 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+          +: "ant-key" });                                               
+      158      mockFetchComments.mockRejectedValue(
+      159        new Error("Invalid Anthropic API key")
+      160      );
+     ...
+      173    });
+      174  
+      175    it("'다시 시도' 클릭 시 재분석한다", async () => {
+      176 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthro
+          -pic: "ant-key" });                                            
+      176 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+          +: "ant-key" });                                               
+      177      mockFetchComments.mockRejectedValueOnce(new Error("comment
+           sDisabled"));
+      178  
+      179      render(<Home />);
+     ...
+      205    });
+      206  
+      207    it("'다른 영상 분석하기' 클릭 시 idle 상태로 돌아간다", asyn
+           c () => {
+      208 -    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthro
+          -pic: "ant-key" });                                            
+      208 +    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+          +: "ant-key" });                                               
+      209      mockFetchComments.mockRejectedValueOnce(new Error("comment
+           sDisabled"));
+      210  
+      211      render(<Home />);
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      48    it("API 키가 없으면 설정 패널이 열린다", () => {
+      49      render(<Home />);
+      50      expect(screen.getByText("YouTube API 키")).toBeDefined();
+      51 -    expect(screen.getByText("Anthropic API 키")).toBeDefined();
+      51 +    expect(screen.getByText("Gemini API 키")).toBeDefined();   
+      52    });
+      53  
+      54    it("API 키가 있으면 설정 패널이 닫힌다", () => {
+
+● Update(src\app\page.test.tsx)
+  ⎿  Added 1 line, removed 1 line
+      156    it("API 키 에러 시 설정 패널이 열린다", async () => {
+      157      mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini
+           : "ant-key" });
+      158      mockFetchComments.mockRejectedValue(
+      159 -      new Error("Invalid Anthropic API key")                  
+      159 +      new Error("Invalid Gemini API key")                     
+      160      );
+      161  
+      162      render(<Home />);
+
+● 이제 page.tsx 프로덕션 코드를 수정합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      38      total: number;
+      39    } | null>(null);
+      40  
+      41 -  const [savedKeys, setSavedKeys] = useState({ youtube: "", ant
+         -hropic: "" });                                                 
+      41 +  const [savedKeys, setSavedKeys] = useState({ youtube: "", gem
+         +ini: "" });                                                    
+      42    const [storageAvail, setStorageAvail] = useState(true);
+      43  
+      44    const inputRef = useRef<HTMLInputElement>(null);
+
+● Update(src\app\page.tsx)
+  ⎿  Added 2 lines, removed 2 lines
+      47      const keys = getApiKeys();
+      48      setSavedKeys(keys);
+      49      setStorageAvail(isStorageAvailable());
+      50 -    if (!keys.youtube || !keys.anthropic) {                    
+      50 +    if (!keys.youtube || !keys.gemini) {                       
+      51        setSettingsOpen(true);
+      52      }
+      53    }, []);
+     ...
+      70      }
+      71  
+      72      const keys = getApiKeys();
+      73 -    if (!keys.youtube || !keys.anthropic) {                    
+      73 +    if (!keys.youtube || !keys.gemini) {                       
+      74        setInlineError("API 키를 먼저 설정해 주세요.");
+      75        setSettingsOpen(true);
+      76        return;
+  ⎿  You've hit your limit · resets 2:10am (Asia/Seoul)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+❯ limit 회복됐어. 다시 재개해줘. 
+
+● page.tsx의 나머지 anthropic 참조를 수정합니다.
+
+● Read 1 file (ctrl+o to expand)
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      102        updateStep(0, "done");
+      103        updateStep(1, "active");
+      104  
+      105 -      const result = await analyzeComments(comments, keys.anth
+          -ropic);                                                       
+      105 +      const result = await analyzeComments(comments, keys.gemi
+          +ni);                                                          
+      106  
+      107        // sentiment 정규화
+      108        const sum =
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      159      setInlineError(null);
+      160    };
+      161  
+      162 -  const handleSaveKeys = (keys: { youtube: string; anthropic: 
+          -string }) => {                                                
+      162 +  const handleSaveKeys = (keys: { youtube: string; gemini: str
+          +ing }) => {                                                   
+      163      saveApiKeys(keys);
+      164      setSavedKeys(keys);
+      165      setSettingsOpen(false);
+
+● Update(src\app\page.tsx)
+  ⎿  Added 1 line, removed 1 line
+      165      setSettingsOpen(false);
+      166    };
+      167  
+      168 -  const handleDeleteKey = (type: "youtube" | "anthropic") => {
+      168 +  const handleDeleteKey = (type: "youtube" | "gemini") => {   
+      169      deleteApiKey(type);
+      170      setSavedKeys((prev) => ({ ...prev, [type]: "" }));
+      171    };
+
+● 모든 파일 수정 완료. 테스트를 실행합니다.
+
+● Bash(cd /c/prj/harness_framework && npm run test 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 test
+     > vitest run
+     … +31 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 전체 152개 테스트 통과. 빌드도 확인합니다.
+
+● Bash(cd /c/prj/harness_framework && npm run build 2>&1)
+  ⎿  > youtube-comment-analyzer@0.1.0 build
+     > next build
+     … +22 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+● 모든 작업 완료. 결과 요약:
+
+  변경된 14개 파일 (프로덕션 7 + 테스트 7):
+
+  레이어: Types
+  변경 내용: ApiKeys.anthropic → ApiKeys.gemini
+  ────────────────────────────────────────
+  레이어: Constants
+  변경 내용: CLAUDE_MODEL → GEMINI_MODEL (gemini-2.0-flash), CLAUDE_MAX_TOKENS →
+
+    GEMINI_MAX_TOKENS, ANTHROPIC_TIMEOUT_MS → GEMINI_TIMEOUT_MS, 에러 메시지
+    업데이트
+  ────────────────────────────────────────
+  레이어: Storage
+  변경 내용: localStorage 키 yt-sentiment-anthropic-key →
+  yt-sentiment-gemini-key
+  ────────────────────────────────────────
+  레이어: API Route
+  변경 내용: Anthropic REST API → Gemini generateContent endpoint,
+  요청/응답/에러
+    형식 전환
+  ────────────────────────────────────────
+  레이어: Service
+  변경 내용: 변경 없음 (제네릭 apiKey 파라미터)
+  ────────────────────────────────────────
+  레이어: Component
+  변경 내용: UI 라벨 "Anthropic API 키" → "Gemini API 키", 링크 →
+    aistudio.google.com/apikey
+  ────────────────────────────────────────
+  레이어: Page
+  변경 내용: savedKeys.anthropic → savedKeys.gemini 전체 참조
+
+  - 테스트 152개 전체 통과
+  - 프로덕션 빌드 성공
+
+  API 키는 https://aistudio.google.com/apikey에서 무료로 발급받을 수 있습니다.
+
+✻ Baked for 3m 54s
+
+❯ 근데 어떻게 실행시켜? 
+
+● 1. API 키 발급:
+    - YouTube: https://console.cloud.google.com/에서 YouTube Data API v3 활성화
+  후 키 발급
+    - Gemini: https://aistudio.google.com/apikey에서 키 발급
+  2. 개발 서버 실행:
+
+  npm run dev
+
+  3. 브라우저에서 http://localhost:3000 접속
+  4. 우측 상단 설정(톱니바퀴) 아이콘 클릭 → 두 API 키 입력 → 저장
+  5. YouTube 영상 URL 붙여넣기 → "분석" 클릭
+
+✻ Baked for 36s

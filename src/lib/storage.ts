@@ -1,7 +1,7 @@
 import type { ApiKeys } from "@/types";
 
 const YOUTUBE_KEY = "yt-sentiment-youtube-key";
-const ANTHROPIC_KEY = "yt-sentiment-anthropic-key";
+const GEMINI_KEY = "yt-sentiment-gemini-key";
 
 /**
  * localStorage에서 API 키를 읽어 반환한다.
@@ -9,16 +9,16 @@ const ANTHROPIC_KEY = "yt-sentiment-anthropic-key";
  */
 export function getApiKeys(): ApiKeys {
   if (typeof window === "undefined") {
-    return { youtube: "", anthropic: "" };
+    return { youtube: "", gemini: "" };
   }
 
   try {
     return {
       youtube: localStorage.getItem(YOUTUBE_KEY) ?? "",
-      anthropic: localStorage.getItem(ANTHROPIC_KEY) ?? "",
+      gemini: localStorage.getItem(GEMINI_KEY) ?? "",
     };
   } catch {
-    return { youtube: "", anthropic: "" };
+    return { youtube: "", gemini: "" };
   }
 }
 
@@ -29,7 +29,7 @@ export function getApiKeys(): ApiKeys {
 export function saveApiKeys(keys: ApiKeys): void {
   try {
     localStorage.setItem(YOUTUBE_KEY, keys.youtube);
-    localStorage.setItem(ANTHROPIC_KEY, keys.anthropic);
+    localStorage.setItem(GEMINI_KEY, keys.gemini);
   } catch {
     // 시크릿 모드 등에서 실패 시 무시
   }
@@ -38,8 +38,8 @@ export function saveApiKeys(keys: ApiKeys): void {
 /**
  * 지정된 API 키를 localStorage에서 삭제한다.
  */
-export function deleteApiKey(type: "youtube" | "anthropic"): void {
-  const key = type === "youtube" ? YOUTUBE_KEY : ANTHROPIC_KEY;
+export function deleteApiKey(type: "youtube" | "gemini"): void {
+  const key = type === "youtube" ? YOUTUBE_KEY : GEMINI_KEY;
   try {
     localStorage.removeItem(key);
   } catch {

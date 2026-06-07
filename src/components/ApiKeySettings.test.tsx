@@ -7,7 +7,7 @@ const defaultProps = {
   onToggle: vi.fn(),
   onSave: vi.fn(),
   onDelete: vi.fn(),
-  savedKeys: { youtube: "", anthropic: "" },
+  savedKeys: { youtube: "", gemini: "" },
   storageAvailable: true,
 };
 
@@ -22,7 +22,7 @@ describe("ApiKeySettings", () => {
   it("open이 true이면 패널을 렌더링한다", () => {
     render(<ApiKeySettings {...defaultProps} />);
     expect(screen.getByText("YouTube API 키")).toBeDefined();
-    expect(screen.getByText("Anthropic API 키")).toBeDefined();
+    expect(screen.getByText("Gemini API 키")).toBeDefined();
     expect(screen.getByText("저장")).toBeDefined();
   });
 
@@ -30,7 +30,7 @@ describe("ApiKeySettings", () => {
     render(
       <ApiKeySettings
         {...defaultProps}
-        savedKeys={{ youtube: "AIzaSyAbcdefghijklmnop", anthropic: "" }}
+        savedKeys={{ youtube: "AIzaSyAbcdefghijklmnop", gemini: "" }}
       />
     );
     expect(screen.getByText("AIzaSy...mnop")).toBeDefined();
@@ -49,12 +49,12 @@ describe("ApiKeySettings", () => {
 
     const inputs = screen.getAllByPlaceholderText("API 키 입력");
     fireEvent.change(inputs[0], { target: { value: "yt-key" } });
-    fireEvent.change(inputs[1], { target: { value: "ant-key" } });
+    fireEvent.change(inputs[1], { target: { value: "gem-key" } });
     fireEvent.click(screen.getByText("저장"));
 
     expect(onSave).toHaveBeenCalledWith({
       youtube: "yt-key",
-      anthropic: "ant-key",
+      gemini: "gem-key",
     });
   });
 
@@ -64,7 +64,7 @@ describe("ApiKeySettings", () => {
       <ApiKeySettings
         {...defaultProps}
         onDelete={onDelete}
-        savedKeys={{ youtube: "some-youtube-key-here", anthropic: "" }}
+        savedKeys={{ youtube: "some-youtube-key-here", gemini: "" }}
       />
     );
     fireEvent.click(screen.getByText("삭제"));

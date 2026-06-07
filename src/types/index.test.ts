@@ -83,10 +83,10 @@ describe("types/index", () => {
   it("ApiKeys 타입이 올바른 구조를 가진다", () => {
     const keys: ApiKeys = {
       youtube: "AIza...",
-      anthropic: "sk-ant-...",
+      gemini: "AIza...",
     };
     expect(keys.youtube).toBeTruthy();
-    expect(keys.anthropic).toBeTruthy();
+    expect(keys.gemini).toBeTruthy();
   });
 
   it("ApiError 타입이 isApiKeyError 선택적 필드를 포함한다", () => {

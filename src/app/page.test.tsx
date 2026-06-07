@@ -13,7 +13,7 @@ vi.mock("@/services/analyzeService", () => ({
 
 // Mock storage
 vi.mock("@/lib/storage", () => ({
-  getApiKeys: vi.fn(() => ({ youtube: "", anthropic: "" })),
+  getApiKeys: vi.fn(() => ({ youtube: "", gemini: "" })),
   saveApiKeys: vi.fn(),
   deleteApiKey: vi.fn(),
   isStorageAvailable: vi.fn(() => true),
@@ -42,17 +42,17 @@ const mockReport = {
 describe("Home (page.tsx)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetApiKeys.mockReturnValue({ youtube: "", anthropic: "" });
+    mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
   });
 
   it("API 키가 없으면 설정 패널이 열린다", () => {
     render(<Home />);
     expect(screen.getByText("YouTube API 키")).toBeDefined();
-    expect(screen.getByText("Anthropic API 키")).toBeDefined();
+    expect(screen.getByText("Gemini API 키")).toBeDefined();
   });
 
   it("API 키가 있으면 설정 패널이 닫힌다", () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     render(<Home />);
     expect(screen.queryByText("YouTube API 키")).toBeNull();
   });
@@ -65,7 +65,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("잘못된 URL 입력 시 인라인 에러를 표시한다", () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt", anthropic: "ant" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt", gemini: "ant" });
     render(<Home />);
 
     const input = screen.getByPlaceholderText("YouTube 영상 URL을 붙여넣으세요");
@@ -78,7 +78,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("API 키 미설정 시 인라인 에러 + 설정 패널 열기", () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "", anthropic: "" });
+    mockGetApiKeys.mockReturnValue({ youtube: "", gemini: "" });
     render(<Home />);
 
     const input = screen.getByPlaceholderText("YouTube 영상 URL을 붙여넣으세요");
@@ -94,7 +94,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("URL 수정 시 인라인 에러가 제거된다", () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt", anthropic: "ant" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt", gemini: "ant" });
     render(<Home />);
 
     const input = screen.getByPlaceholderText("YouTube 영상 URL을 붙여넣으세요");
@@ -111,7 +111,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("정상 분석 흐름: 리포트가 표시된다", async () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     mockFetchComments.mockResolvedValue({
       comments: [
         { id: "1", text: "좋아요", author: "A", likeCount: 5, publishedAt: "2024-01-01T00:00:00Z" },
@@ -135,7 +135,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("에러 흐름: fetchComments 실패 시 에러를 표시한다", async () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     mockFetchComments.mockRejectedValue(new Error("commentsDisabled"));
 
     render(<Home />);
@@ -154,9 +154,9 @@ describe("Home (page.tsx)", () => {
   });
 
   it("API 키 에러 시 설정 패널이 열린다", async () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     mockFetchComments.mockRejectedValue(
-      new Error("Invalid Anthropic API key")
+      new Error("Invalid Gemini API key")
     );
 
     render(<Home />);
@@ -173,7 +173,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("'다시 시도' 클릭 시 재분석한다", async () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     mockFetchComments.mockRejectedValueOnce(new Error("commentsDisabled"));
 
     render(<Home />);
@@ -205,7 +205,7 @@ describe("Home (page.tsx)", () => {
   });
 
   it("'다른 영상 분석하기' 클릭 시 idle 상태로 돌아간다", async () => {
-    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", anthropic: "ant-key" });
+    mockGetApiKeys.mockReturnValue({ youtube: "yt-key", gemini: "ant-key" });
     mockFetchComments.mockRejectedValueOnce(new Error("commentsDisabled"));
 
     render(<Home />);

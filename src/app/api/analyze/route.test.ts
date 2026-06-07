@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "./route";
 
-const VALID_API_KEY = "sk-ant-test-key-123";
+const VALID_API_KEY = "test-gemini-key-123";
 
 const sampleComments = [
   { id: "c1", text: "좋은 영상 감사합니다", author: "유저A", likeCount: 42, publishedAt: "2024-01-15T09:30:00Z" },
@@ -28,25 +28,24 @@ function makeRequest(body: unknown): Request {
   });
 }
 
-function makeAnthropicResponse(text: string) {
+function makeGeminiResponse(text: string) {
   return {
     ok: true,
     status: 200,
     json: () =>
       Promise.resolve({
-        content: [{ type: "text", text }],
+        candidates: [{ content: { parts: [{ text }] } }],
       }),
   };
 }
 
-function makeAnthropicErrorResponse(status: number, type: string, message = "Error") {
+function makeGeminiErrorResponse(status: number, message: string, errorStatus = "INVALID_ARGUMENT") {
   return {
     ok: false,
     status,
     json: () =>
       Promise.resolve({
-        type: "error",
-        error: { type, message },
+        error: { code: status, message, status: errorStatus },
       }),
   };
 }
@@ -60,7 +59,7 @@ describe("POST /api/analyze", () => {
     it("유효한 JSON → 200 + AnalysisReport", async () => {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(makeAnthropicResponse(JSON.stringify(validReport)))
+        vi.fn().mockResolvedValue(makeGeminiResponse(JSON.stringify(validReport)))
       );
 
       const res = await POST(makeRequest({ comments: sampleComments, apiKey: VALID_API_KEY }));
@@ -78,7 +77,7 @@ describe("POST /api/analyze", () => {
       const wrapped = "```json\n" + JSON.stringify(validReport) + "\n```";
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(makeAnthropicResponse(wrapped))
+        vi.fn().mockResolvedValue(makeGeminiResponse(wrapped))
       );
 
       const res = await POST(makeRequest({ comments: sampleComments, apiKey: VALID_API_KEY }));
@@ -92,7 +91,7 @@ describe("POST /api/analyze", () => {
       const withText = "Here is the analysis:\n" + JSON.stringify(validReport) + "\nDone.";
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(makeAnthropicResponse(withText))
+        vi.fn().mockResolvedValue(makeGeminiResponse(withText))
       );
 
       const res = await POST(makeRequest({ comments: sampleComments, apiKey: VALID_API_KEY }));
@@ -129,12 +128,12 @@ describe("POST /api/analyze", () => {
     });
   });
 
-  describe("Anthropic API 에러", () => {
-    it("401 (authentication_error) → 401 + isApiKeyError: true", async () => {
+  describe("Gemini API 에러", () => {
+    it("API key not valid → 401 + isApiKeyError: true", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
-          makeAnthropicErrorResponse(401, "authentication_error", "Invalid API key")
+          makeGeminiErrorResponse(400, "API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT")
         )
       );
 
@@ -142,15 +141,15 @@ describe("POST /api/analyze", () => {
       expect(res.status).toBe(401);
 
       const body = await res.json();
-      expect(body.error).toBe("Invalid Anthropic API key");
+      expect(body.error).toBe("Invalid Gemini API key");
       expect(body.isApiKeyError).toBe(true);
     });
 
-    it("429 (rate_limit_error) → 429", async () => {
+    it("429 (RESOURCE_EXHAUSTED) → 429", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
-          makeAnthropicErrorResponse(429, "rate_limit_error", "Rate limited")
+          makeGeminiErrorResponse(429, "Resource exhausted", "RESOURCE_EXHAUSTED")
         )
       );
 
@@ -158,15 +157,15 @@ describe("POST /api/analyze", () => {
       expect(res.status).toBe(429);
 
       const body = await res.json();
-      expect(body.error).toBe("Rate limited. Please try again later.");
+      expect(body.error).toBe("Gemini API quota exceeded");
       expect(body.isApiKeyError).toBeUndefined();
     });
 
-    it("500 (api_error) → 502", async () => {
+    it("500 (INTERNAL) → 502", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
-          makeAnthropicErrorResponse(500, "api_error", "Internal server error")
+          makeGeminiErrorResponse(500, "Internal error", "INTERNAL")
         )
       );
 
@@ -184,7 +183,7 @@ describe("POST /api/analyze", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
-          makeAnthropicResponse("I cannot analyze these comments because they are inappropriate.")
+          makeGeminiResponse("I cannot analyze these comments because they are inappropriate.")
         )
       );
 

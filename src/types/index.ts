@@ -79,8 +79,8 @@ export interface LoadingStep {
 export interface ApiKeys {
   /** YouTube Data API v3 키 */
   youtube: string;
-  /** Anthropic API 키 */
-  anthropic: string;
+  /** Gemini API 키 */
+  gemini: string;
 }
 
 /** API 에러 응답 */

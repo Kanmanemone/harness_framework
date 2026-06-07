@@ -1,12 +1,12 @@
 import type { Comment } from "@/types";
 
-export const CLAUDE_MODEL = "claude-sonnet-4-20250514";
-export const CLAUDE_MAX_TOKENS = 2048;
+export const GEMINI_MODEL = "gemini-2.0-flash";
+export const GEMINI_MAX_TOKENS = 2048;
 export const YOUTUBE_TIMEOUT_MS = 15000;
-export const ANTHROPIC_TIMEOUT_MS = 30000;
+export const GEMINI_TIMEOUT_MS = 30000;
 
 /**
- * 댓글 목록을 Claude 분석용 프롬프트로 조립한다.
+ * 댓글 목록을 Gemini 분석용 프롬프트로 조립한다.
  */
 export function buildAnalysisPrompt(comments: Comment[]): string {
   const commentLines = comments
@@ -50,8 +50,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   commentsDisabled: "이 영상은 댓글이 비활성화되어 있습니다.",
   quotaExceeded: "YouTube API 일일 할당량을 초과했습니다. 내일 다시 시도해 주세요.",
   videoNotFound: "영상을 찾을 수 없습니다. URL을 확인해 주세요.",
-  "Invalid Anthropic API key": "Anthropic API 키가 유효하지 않습니다. 키를 확인해 주세요.",
-  "Insufficient Anthropic API credits": "Anthropic API 잔액이 부족합니다. 크레딧을 확인해 주세요.",
+  "Invalid Gemini API key": "Gemini API 키가 유효하지 않습니다. 키를 확인해 주세요.",
+  "Gemini API quota exceeded": "Gemini API 할당량을 초과했습니다. 잠시 후 다시 시도해 주세요.",
   "Rate limited": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   "AI service temporarily unavailable": "AI 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.",
   "AI service timeout": "AI 응답이 너무 오래 걸립니다. 다시 시도해 주세요.",
@@ -69,7 +69,7 @@ export function mapErrorMessage(errorCode: string): string {
 }
 
 const API_KEY_ERROR_CODES = new Set([
-  "Invalid Anthropic API key",
+  "Invalid Gemini API key",
   "YouTube API error",
 ]);
 

@@ -3,29 +3,29 @@ import {
   buildAnalysisPrompt,
   mapErrorMessage,
   isApiKeyError,
-  CLAUDE_MODEL,
-  CLAUDE_MAX_TOKENS,
+  GEMINI_MODEL,
+  GEMINI_MAX_TOKENS,
   YOUTUBE_TIMEOUT_MS,
-  ANTHROPIC_TIMEOUT_MS,
+  GEMINI_TIMEOUT_MS,
 } from "./constants";
 import type { Comment } from "@/types";
 
 describe("constants", () => {
   describe("상수 값", () => {
-    it("CLAUDE_MODEL", () => {
-      expect(CLAUDE_MODEL).toBe("claude-sonnet-4-20250514");
+    it("GEMINI_MODEL", () => {
+      expect(GEMINI_MODEL).toBe("gemini-2.0-flash");
     });
 
-    it("CLAUDE_MAX_TOKENS", () => {
-      expect(CLAUDE_MAX_TOKENS).toBe(2048);
+    it("GEMINI_MAX_TOKENS", () => {
+      expect(GEMINI_MAX_TOKENS).toBe(2048);
     });
 
     it("YOUTUBE_TIMEOUT_MS", () => {
       expect(YOUTUBE_TIMEOUT_MS).toBe(15000);
     });
 
-    it("ANTHROPIC_TIMEOUT_MS", () => {
-      expect(ANTHROPIC_TIMEOUT_MS).toBe(30000);
+    it("GEMINI_TIMEOUT_MS", () => {
+      expect(GEMINI_TIMEOUT_MS).toBe(30000);
     });
   });
 
@@ -84,12 +84,12 @@ describe("constants", () => {
       expect(mapErrorMessage("videoNotFound")).toBe("영상을 찾을 수 없습니다. URL을 확인해 주세요.");
     });
 
-    it("Invalid Anthropic API key 에러를 매핑한다", () => {
-      expect(mapErrorMessage("Invalid Anthropic API key")).toBe("Anthropic API 키가 유효하지 않습니다. 키를 확인해 주세요.");
+    it("Invalid Gemini API key 에러를 매핑한다", () => {
+      expect(mapErrorMessage("Invalid Gemini API key")).toBe("Gemini API 키가 유효하지 않습니다. 키를 확인해 주세요.");
     });
 
-    it("Insufficient Anthropic API credits 에러를 매핑한다", () => {
-      expect(mapErrorMessage("Insufficient Anthropic API credits")).toBe("Anthropic API 잔액이 부족합니다. 크레딧을 확인해 주세요.");
+    it("Gemini API quota exceeded 에러를 매핑한다", () => {
+      expect(mapErrorMessage("Gemini API quota exceeded")).toBe("Gemini API 할당량을 초과했습니다. 잠시 후 다시 시도해 주세요.");
     });
 
     it("Rate limited 에러를 매핑한다", () => {
@@ -126,8 +126,8 @@ describe("constants", () => {
   });
 
   describe("isApiKeyError", () => {
-    it("Invalid Anthropic API key는 true를 반환한다", () => {
-      expect(isApiKeyError("Invalid Anthropic API key")).toBe(true);
+    it("Invalid Gemini API key는 true를 반환한다", () => {
+      expect(isApiKeyError("Invalid Gemini API key")).toBe(true);
     });
 
     it("YouTube API error는 true를 반환한다", () => {

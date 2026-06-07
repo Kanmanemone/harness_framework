@@ -38,7 +38,7 @@ export default function Home() {
     total: number;
   } | null>(null);
 
-  const [savedKeys, setSavedKeys] = useState({ youtube: "", anthropic: "" });
+  const [savedKeys, setSavedKeys] = useState({ youtube: "", gemini: "" });
   const [storageAvail, setStorageAvail] = useState(true);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +47,7 @@ export default function Home() {
     const keys = getApiKeys();
     setSavedKeys(keys);
     setStorageAvail(isStorageAvailable());
-    if (!keys.youtube || !keys.anthropic) {
+    if (!keys.youtube || !keys.gemini) {
       setSettingsOpen(true);
     }
   }, []);
@@ -70,7 +70,7 @@ export default function Home() {
     }
 
     const keys = getApiKeys();
-    if (!keys.youtube || !keys.anthropic) {
+    if (!keys.youtube || !keys.gemini) {
       setInlineError("API 키를 먼저 설정해 주세요.");
       setSettingsOpen(true);
       return;
@@ -102,7 +102,7 @@ export default function Home() {
       updateStep(0, "done");
       updateStep(1, "active");
 
-      const result = await analyzeComments(comments, keys.anthropic);
+      const result = await analyzeComments(comments, keys.gemini);
 
       // sentiment 정규화
       const sum =
@@ -159,13 +159,13 @@ export default function Home() {
     setInlineError(null);
   };
 
-  const handleSaveKeys = (keys: { youtube: string; anthropic: string }) => {
+  const handleSaveKeys = (keys: { youtube: string; gemini: string }) => {
     saveApiKeys(keys);
     setSavedKeys(keys);
     setSettingsOpen(false);
   };
 
-  const handleDeleteKey = (type: "youtube" | "anthropic") => {
+  const handleDeleteKey = (type: "youtube" | "gemini") => {
     deleteApiKey(type);
     setSavedKeys((prev) => ({ ...prev, [type]: "" }));
   };

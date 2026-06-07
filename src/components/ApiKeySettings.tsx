@@ -7,7 +7,7 @@ interface ApiKeySettingsProps {
   open: boolean;
   onToggle: () => void;
   onSave: (keys: ApiKeys) => void;
-  onDelete: (type: "youtube" | "anthropic") => void;
+  onDelete: (type: "youtube" | "gemini") => void;
   savedKeys: ApiKeys;
   storageAvailable: boolean;
 }
@@ -26,17 +26,17 @@ export default function ApiKeySettings({
   storageAvailable,
 }: ApiKeySettingsProps) {
   const [youtubeKey, setYoutubeKey] = useState("");
-  const [anthropicKey, setAnthropicKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
 
   if (!open) return null;
 
   const handleSave = () => {
     onSave({
       youtube: youtubeKey || savedKeys.youtube,
-      anthropic: anthropicKey || savedKeys.anthropic,
+      gemini: geminiKey || savedKeys.gemini,
     });
     setYoutubeKey("");
-    setAnthropicKey("");
+    setGeminiKey("");
   };
 
   return (
@@ -86,16 +86,16 @@ export default function ApiKeySettings({
         </p>
       </div>
 
-      {/* Anthropic API Key */}
+      {/* Gemini API Key */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-sm text-neutral-400">Anthropic API 키</label>
-          {savedKeys.anthropic ? (
+          <label className="text-sm text-neutral-400">Gemini API 키</label>
+          {savedKeys.gemini ? (
             <div className="flex items-center gap-2">
               <svg className="text-emerald-400 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              <span className="text-xs text-neutral-500">{maskKey(savedKeys.anthropic)}</span>
+              <span className="text-xs text-neutral-500">{maskKey(savedKeys.gemini)}</span>
             </div>
           ) : (
             <span className="text-xs text-neutral-600">미설정</span>
@@ -104,14 +104,14 @@ export default function ApiKeySettings({
         <div className="flex gap-2">
           <input
             type="password"
-            value={anthropicKey}
-            onChange={(e) => setAnthropicKey(e.target.value)}
-            placeholder={savedKeys.anthropic ? "새 키로 변경" : "API 키 입력"}
+            value={geminiKey}
+            onChange={(e) => setGeminiKey(e.target.value)}
+            placeholder={savedKeys.gemini ? "새 키로 변경" : "API 키 입력"}
             className="flex-1 rounded-lg bg-neutral-900 border border-neutral-700 px-4 py-3 text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none transition-colors text-sm"
           />
-          {savedKeys.anthropic && (
+          {savedKeys.gemini && (
             <button
-              onClick={() => onDelete("anthropic")}
+              onClick={() => onDelete("gemini")}
               className="text-neutral-500 hover:text-neutral-300 transition-colors text-sm"
             >
               삭제
@@ -120,12 +120,12 @@ export default function ApiKeySettings({
         </div>
         <p className="text-xs text-neutral-600">
           <a
-            href="https://console.anthropic.com/"
+            href="https://aistudio.google.com/apikey"
             target="_blank"
             rel="noopener noreferrer"
             className="text-neutral-400 underline hover:text-neutral-200"
           >
-            Anthropic Console
+            Google AI Studio
           </a>
           에서 API 키를 발급받으세요.
         </p>
